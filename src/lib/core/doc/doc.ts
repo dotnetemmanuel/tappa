@@ -56,9 +56,18 @@ export function layerOf(doc: Doc, id: LayerId): Layer | undefined {
 	return doc.layers.find((l) => l.id === id);
 }
 
-export function isEditable(doc: Doc, e: Entity): boolean {
+/** Can it be clicked. A locked layer hides its contents from the pointer entirely. */
+export function isSelectable(doc: Doc, e: Entity): boolean {
 	const l = layerOf(doc, e.layer);
-	if (!l || l.locked || !l.visible) return false;
+	return !!l && l.visible && !l.locked;
+}
+
+/**
+ * Can it be moved or reshaped. An entity lock stops the geometry changing but
+ * still lets you select the thing, or there would be no way to unlock it.
+ */
+export function isEditable(doc: Doc, e: Entity): boolean {
+	if (!isSelectable(doc, e)) return false;
 	return !(e.k === 'image' && e.locked);
 }
 

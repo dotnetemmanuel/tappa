@@ -1,4 +1,4 @@
-import { entityBounds, entityRing, entityVertices, isClosed, isEditable } from '../doc/doc.js';
+import { entityBounds, entityRing, entityVertices, isClosed, isSelectable } from '../doc/doc.js';
 import type { Doc, Entity, EntityId, EntityKind, NodeId } from '../doc/types.js';
 import { pointInPolygon } from './polygon.js';
 import {
@@ -75,7 +75,7 @@ function considered(doc: Doc, e: Entity, o: Omit<PickOptions, 'tolerance'>): boo
 	if (o.only && !o.only.has(e.id)) return false;
 	if (o.exclude?.has(e.id)) return false;
 	if (o.kinds && !o.kinds.has(e.k)) return false;
-	if (o.respectLayers !== false && !isEditable(doc, e)) return false;
+	if (o.respectLayers !== false && !isSelectable(doc, e)) return false;
 	return true;
 }
 
@@ -169,7 +169,7 @@ export function pickInRect(
 	const out: Entity[] = [];
 	for (const e of doc.entities) {
 		if (o.kinds && !o.kinds.has(e.k)) continue;
-		if (o.respectLayers !== false && !isEditable(doc, e)) continue;
+		if (o.respectLayers !== false && !isSelectable(doc, e)) continue;
 		const vs = entityVertices(doc, e);
 		if (vs.length === 0) continue;
 		if (o.crossing) {

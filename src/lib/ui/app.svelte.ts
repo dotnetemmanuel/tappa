@@ -40,7 +40,7 @@ export const TOOLS: readonly { id: ToolId; sv: string; key: string; hint: string
 	{ id: 'wall', sv: 'Vägg', key: 'w', hint: 'Klicka ut väggarna, Enter avslutar. Hörn delas mellan väggar' },
 	{ id: 'plant', sv: 'Växt', key: 'p', hint: 'Klicka för att plantera, dra längs en linje för en rad' },
 	{ id: 'prop', sv: 'Föremål', key: 'o', hint: 'Klicka för att placera' },
-	{ id: 'image', sv: 'Bild', key: 'i', hint: 'Släpp en bild på ritningen, eller klistra in den' },
+	{ id: 'image', sv: 'Bild', key: 'i', hint: 'Klicka på en bild för att välja den, eller släpp in en ny' },
 	{ id: 'text', sv: 'Text', key: 't', hint: 'Klicka där texten ska stå' }
 ];
 

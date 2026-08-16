@@ -3,7 +3,7 @@
 	import { AddEntities } from '$lib/core/cmd/edits.js';
 	import { makeImage } from '$lib/core/doc/factory.js';
 	import { defaultScale, imagesFrom, ingestImage } from '$lib/io/image.js';
-	import { putImage } from '$lib/io/imagecache.js';
+	import { preloadAssets, putImage } from '$lib/io/imagecache.js';
 	import { migrate } from '$lib/io/migrate.js';
 	import { getKV, isStorageAvailable, loadProject, saveProject, setKV } from '$lib/io/store.js';
 	import { toWorld } from '$lib/render2d/view.js';
@@ -39,6 +39,15 @@
 			(m) => (SceneView = m.default),
 			() => (sceneFailed = true)
 		);
+	});
+
+	// A reopened project has asset records but no decoded bitmaps, so the underlay
+	// would draw as an empty outline until something pulls them back out of storage.
+	$effect(() => {
+		void app.rev;
+		const ids = app.doc.assets.map((a) => a.id);
+		if (ids.length === 0) return;
+		preloadAssets(ids, (id) => app.doc.assets.find((a) => a.id === id)?.hash ?? null);
 	});
 
 	const isEmpty = $derived.by(() => {
@@ -118,7 +127,7 @@
 				const e = makeImage(asset.id, where, defaultScale(bitmap));
 				app.history.run(new AddEntities([e], 'Bild'));
 				app.select([e.id]);
-				app.status = 'Bilden är låst. Välj den och sätt skalan för att rita av tomten.';
+				app.status = 'Sätt skalan i panelen. Bilden är låst, tryck I och klicka på den för att välja den igen.';
 			} catch (err) {
 				app.status = err instanceof Error ? err.message : 'Kunde inte läsa bilden';
 			}

@@ -30,6 +30,7 @@ import { panBy, toWorld, zoomAt } from '../render2d/view.js';
 import type { AppState } from './app.svelte.js';
 
 const PICK_PX = 9;
+const IMAGE_KINDS: ReadonlySet<Entity['k']> = new Set(['image']);
 const CLICK_SLOP_PX = 4;
 
 type Chain = { t: 'chain'; kind: 'area' | 'path' | 'fence' | 'plot'; pts: Vec2[] };
@@ -160,7 +161,7 @@ export class PlanController {
 				break;
 			}
 			case 'image':
-				this.app.status = 'Släpp en bildfil på ritningen, eller klistra in en med Ctrl+V';
+				this.imageClick(world);
 				break;
 			case 'dim':
 				this.dimClick(world);
@@ -394,7 +395,7 @@ export class PlanController {
 
 		if (selected.size > 0) {
 			const part = pick(this.app.doc, world, { tolerance: tol, only: selected });
-			if (part?.part === 'vertex') {
+			if (part?.part === 'vertex' && isEditable(this.app.doc, part.entity)) {
 				this.drag = { d: 'vertex', id: part.entity.id, index: part.index, original: part.entity };
 				return;
 			}
@@ -615,6 +616,21 @@ export class PlanController {
 		this.app.history.run(new ReplaceEntities([{ ...image, transform }], 'Skala om bild'));
 		this.cancelCalibration();
 		this.app.status = 'Bilden är skalad';
+	}
+
+	/** The underlay layer is locked so it does not steal clicks, so this is the way back to it. */
+	private imageClick(world: Vec2): void {
+		const hit = pick(this.app.doc, world, {
+			tolerance: this.tol(),
+			respectLayers: false,
+			kinds: IMAGE_KINDS
+		});
+		if (!hit) {
+			this.app.status = 'Släpp en bildfil på ritningen, eller klistra in en med Ctrl+V';
+			return;
+		}
+		this.app.select([hit.entity.id]);
+		this.app.status = 'Bilden är vald. Sätt skalan, eller lås upp den för att flytta den.';
 	}
 
 	private dimClick(world: Vec2): void {

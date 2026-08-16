@@ -265,9 +265,9 @@ describe('layers', () => {
 		expect(pick(doc, v(5, 5), { tolerance: 0.2, respectLayers: false })?.entity.id).toBe('a');
 	});
 
-	it('skips a locked image even on an open layer', () => {
+	it('still picks a locked image on an open layer, so it can be unlocked again', () => {
 		const doc = makeDoc({ entities: [image('i', v(0, 0), true)] });
-		expect(pick(doc, v(1, 1), { tolerance: 0.2 })).toBeNull();
+		expect(pick(doc, v(1, 1), { tolerance: 0.2 })?.entity.id).toBe('i');
 		expect(pick(doc, v(1, 1), { tolerance: 0.2, respectLayers: false })?.entity.id).toBe('i');
 	});
 });
