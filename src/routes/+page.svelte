@@ -147,7 +147,9 @@
 	}
 
 	onMount(() => {
-		app.setTool('select');
+		// Only the hint, not the tool: resetting it here would clobber a tool the
+		// user picked while the page was still starting up.
+		app.status = TOOLS[0].hint;
 		let timer: ReturnType<typeof setTimeout> | null = null;
 
 		(async () => {

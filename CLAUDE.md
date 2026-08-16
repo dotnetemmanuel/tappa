@@ -127,3 +127,5 @@ missing under each one below is the honest remainder.
 - Openings are placed by a slider in the inspector, not by clicking the wall.
 - Textures and cutout billboards are modelled and stored but have no UI yet.
 - Touch and pinch are untested on real hardware.
+- The 3D view PNG re-renders at export resolution, so a very large scale on a
+  weak card can stall for a moment.

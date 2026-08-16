@@ -82,6 +82,8 @@ export class AppState {
 	projectId = $state('');
 	/** Set by the 3D view so exports can grab the current frame. */
 	sceneCanvas = $state<HTMLCanvasElement | null>(null);
+	/** Renders the scene at export resolution and hands back a readable canvas. */
+	sceneCapture = $state<((scale: number) => HTMLCanvasElement) | null>(null);
 	dirty = $state(false);
 	/** Bumped whenever the undo stack changes, so buttons re-evaluate. */
 	historyRev = $state(0);

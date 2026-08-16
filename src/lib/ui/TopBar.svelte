@@ -2,7 +2,7 @@
 	import { SetMeta } from '../core/cmd/edits.js';
 	import { createDoc } from '../core/doc/doc.js';
 	import { packTappa, suggestFilename, unpackTappa, type AssetBlob } from '../io/tappa.js';
-	import { getAsset, putAsset } from '../io/store.js';
+	import { getAsset, putAsset, setKV } from '../io/store.js';
 	import { putImage } from '../io/imagecache.js';
 	import ExportMenu from './ExportMenu.svelte';
 	import type { AppState } from './app.svelte.js';
@@ -49,10 +49,20 @@
 		}
 	}
 
+	/** A new project needs its own id, or autosave writes the blank one over the old. */
+	async function newProject(): Promise<void> {
+		app.loadDoc(createDoc());
+		app.projectId = crypto.randomUUID();
+		await setKV('lastProject', app.projectId);
+	}
+
 	async function importTappa(file: File): Promise<void> {
 		busy = true;
 		try {
 			const { doc, assets } = unpackTappa(new Uint8Array(await file.arrayBuffer()));
+			// An imported project is its own project, not an overwrite of the open one.
+			app.projectId = crypto.randomUUID();
+			await setKV('lastProject', app.projectId);
 			for (const a of assets) {
 				const ref = doc.assets.find((x) => x.id === a.id);
 				if (!ref) continue;
@@ -113,11 +123,7 @@
 		<button
 			type="button"
 			class="rounded px-2 py-1 text-[12px] text-sage hover:bg-line hover:text-chalk"
-			onclick={() => {
-				if (app.dirty && !confirm('Nytt projekt? Det du ritat sparas lokalt men töms från vyn.'))
-					return;
-				app.loadDoc(createDoc());
-			}}
+			onclick={newProject}
 		>
 			Nytt
 		</button>

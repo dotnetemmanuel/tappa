@@ -30,6 +30,7 @@
 		};
 		scene = s;
 		app.sceneCanvas = canvas;
+		app.sceneCapture = (scale: number) => s.capture(scale);
 
 		const ro = new ResizeObserver(() => {
 			const r = wrap.getBoundingClientRect();
@@ -42,6 +43,7 @@
 			s.dispose();
 			scene = null;
 			app.sceneCanvas = null;
+			app.sceneCapture = null;
 		};
 	});
 

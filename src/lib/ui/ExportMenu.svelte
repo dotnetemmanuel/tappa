@@ -73,7 +73,8 @@
 				disabled={!sceneCanvas}
 				onclick={() =>
 					run('Vybild', async () => {
-						if (sceneCanvas) downloadBlob(await exportViewPng(sceneCanvas, 2), `${stem}-vy.png`);
+						const grab = app.sceneCapture?.(2) ?? sceneCanvas;
+						if (grab) downloadBlob(await exportViewPng(grab, 1), `${stem}-vy.png`);
 					})}
 			>
 				3D-vyn som PNG

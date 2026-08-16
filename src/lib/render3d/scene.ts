@@ -292,10 +292,29 @@ export class PlanScene {
 		this.keys.delete(ev.key.toLowerCase());
 	};
 
-	/** Grab the current frame, for the PNG export. */
-	snapshot(): HTMLCanvasElement {
+	/**
+	 * Render at export resolution and copy it out in the same task. The WebGL
+	 * buffer is cleared once the frame is composited, so reading the canvas any
+	 * later hands back a blank image.
+	 */
+	capture(scale = 2): HTMLCanvasElement {
+		const gl = this.renderer.domElement;
+		const w = gl.clientWidth || gl.width;
+		const h = gl.clientHeight || gl.height;
+		const ratio = this.renderer.getPixelRatio();
+		this.renderer.setPixelRatio(Math.min(4, ratio * scale));
+		this.renderer.setSize(w, h, false);
 		this.renderer.render(this.scene, this.camera);
-		return this.renderer.domElement;
+
+		const out = document.createElement('canvas');
+		out.width = gl.width;
+		out.height = gl.height;
+		out.getContext('2d')?.drawImage(gl, 0, 0);
+
+		this.renderer.setPixelRatio(ratio);
+		this.renderer.setSize(w, h, false);
+		this.renderer.render(this.scene, this.camera);
+		return out;
 	}
 }
 

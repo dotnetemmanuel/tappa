@@ -39,7 +39,7 @@
 	const propResults = $derived(query.trim() ? searchProps(query) : null);
 </script>
 
-<section class="flex min-h-0 flex-1 flex-col border-b border-line">
+<section class="flex flex-col border-b border-line">
 	<div class="flex items-center gap-2 px-3 pb-2 pt-3">
 		<h2 class="heading text-[13px] tracking-wide text-chalk">
 			{showProps ? 'Föremål' : 'Växter'}
@@ -58,7 +58,7 @@
 		/>
 	</div>
 
-	<div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+	<div class="max-h-[40vh] overflow-y-auto px-3 pb-3">
 		{#if showProps}
 			{#if propResults}
 				<ul class="space-y-0.5">
