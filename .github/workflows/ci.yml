@@ -38,15 +38,17 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Publishing is opt in: Pages needs the repo to be public on a free plan,
+      # so set the repository variable PUBLISH_PAGES to true once that is sorted.
       - name: Upload the built site
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && vars.PUBLISH_PAGES == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: build
 
   deploy:
     needs: verify
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && vars.PUBLISH_PAGES == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
