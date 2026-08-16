@@ -11,7 +11,9 @@ export default defineConfig({
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
-			adapter: adapter({ fallback: 'index.html' })
+			// Relative asset urls keep the build portable to a subpath, which is how
+			// GitHub Pages serves it, and 404.html is what Pages falls back to.
+			adapter: adapter({ fallback: '404.html' })
 		})
 	],
 	test: {
