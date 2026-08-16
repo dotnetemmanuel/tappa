@@ -1,0 +1,50 @@
+{
+	"name": "tappa",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"license": "MIT",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"lint": "eslint .",
+		"format": "prettier --write .",
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"dependencies": {
+		"earcut": "^3.2.3",
+		"fflate": "^0.8.3",
+		"idb": "^8.0.3",
+		"pdf-lib": "^1.17.1",
+		"polygon-clipping": "^0.15.7",
+		"suncalc": "^2.0.1",
+		"three": "^0.185.1"
+	},
+	"devDependencies": {
+		"@eslint/js": "^10.0.1",
+		"@sveltejs/adapter-static": "^3.0.10",
+		"@sveltejs/kit": "^2.70.2",
+		"@sveltejs/vite-plugin-svelte": "^7.3.0",
+		"@tailwindcss/vite": "^4.3.3",
+		"@types/earcut": "^3.0.0",
+		"@types/suncalc": "^1.9.2",
+		"@types/three": "^0.185.4",
+		"eslint": "^10.8.1",
+		"eslint-plugin-svelte": "^3.23.0",
+		"globals": "^17.11.0",
+		"prettier": "^3.9.6",
+		"prettier-plugin-svelte": "^4.1.1",
+		"svelte": "^5.56.9",
+		"svelte-check": "^4.7.6",
+		"tailwindcss": "^4.3.3",
+		"typescript": "^6.0.3",
+		"typescript-eslint": "^8.67.0",
+		"vite": "^8.2.1",
+		"vitest": "^4.1.10"
+	}
+}

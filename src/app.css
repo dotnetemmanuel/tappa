@@ -1,0 +1,93 @@
+@import 'tailwindcss';
+@import './lib/ui/fonts.css';
+
+@theme {
+	--color-ink: #14211c;
+	--color-bark: #1b2b25;
+	--color-line: #2f473d;
+	--color-chalk: #e9efe6;
+	--color-sage: #93a89b;
+	--color-seed: #dfa53c;
+	--color-paper: #eceee2;
+	--color-grid-m: #d3d9c4;
+	--color-grid-5m: #bcc4a9;
+
+	--font-display: 'Fraunces', ui-serif, Georgia, serif;
+	--font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+:root {
+	color-scheme: dark;
+	--panel-w: 17rem;
+	--bar-h: 2.75rem;
+}
+
+html,
+body {
+	height: 100%;
+}
+
+body {
+	background: var(--color-ink);
+	color: var(--color-chalk);
+	font-family: var(--font-sans);
+	overscroll-behavior: none;
+	-webkit-font-smoothing: antialiased;
+}
+
+/* Measurements are data, so they read as data. */
+.num {
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.01em;
+}
+
+.heading {
+	font-family: var(--font-display);
+	font-optical-sizing: auto;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+
+:focus-visible {
+	outline: 2px solid var(--color-seed);
+	outline-offset: 2px;
+	border-radius: 2px;
+}
+
+button,
+input,
+select {
+	font: inherit;
+	color: inherit;
+}
+
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+	appearance: none;
+	margin: 0;
+}
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: var(--color-line);
+	border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

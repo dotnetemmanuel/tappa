@@ -1,0 +1,54 @@
+Vendored typefaces for Täppa
+============================
+
+All three families are licensed under the SIL Open Font License, Version 1.1.
+Full text: https://openfontlicense.org/open-font-license-official-text/
+
+The OFL permits bundling and redistribution with an application. The only
+conditions that bind us here: the fonts are not sold on their own, this notice
+travels with them, and any modified copy is not shipped under the original name.
+The files below are unmodified except for the subsetting Google Fonts applies
+when it serves them.
+
+Only the latin and latin-ext subsets are vendored. The interface is Swedish and
+English, so cyrillic, greek and vietnamese are deliberately left out.
+
+
+Fraunces
+--------
+Copyright 2020 The Fraunces Project Authors
+Designers: Phaedra Charles and Flavia Zimbardi, Undercase Type
+Project:   https://github.com/undercasetype/Fraunces
+Licence:   SIL Open Font License 1.1
+Source:    https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500..700&display=swap
+Version:   Google Fonts v38, retrieved 2026-08-16
+Files:     fraunces-var-latin.woff2, fraunces-var-latin-ext.woff2
+Variable:  opsz 9 to 144 (default 9), wght 100 to 900 (default 900)
+Used for:  the wordmark and panel headings only
+
+
+Archivo
+-------
+Copyright 2017 The Archivo Project Authors
+Designers: Omnibus-Type
+Project:   https://github.com/Omnibus-Type/Archivo
+Licence:   SIL Open Font License 1.1
+Source:    https://fonts.googleapis.com/css2?family=Archivo:wght@400..600&display=swap
+Version:   Google Fonts v25, retrieved 2026-08-16
+Files:     archivo-var-latin.woff2, archivo-var-latin-ext.woff2
+Variable:  wght 100 to 900 (default 600), width pinned at 100 percent
+Used for:  interface text
+
+
+IBM Plex Mono
+-------------
+Copyright 2017 IBM Corp.
+Designers: Mike Abbink, Bold Monday
+Project:   https://github.com/IBM/plex
+Licence:   SIL Open Font License 1.1
+Source:    https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap
+Version:   Google Fonts v20, retrieved 2026-08-16
+Files:     ibm-plex-mono-400-latin.woff2, ibm-plex-mono-400-latin-ext.woff2,
+           ibm-plex-mono-500-latin.woff2, ibm-plex-mono-500-latin-ext.woff2
+Variable:  no, static weights 400 and 500
+Used for:  numbers, dimensions and coordinates
