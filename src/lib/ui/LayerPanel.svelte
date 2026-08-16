@@ -4,6 +4,13 @@
 
 	let { app }: { app: AppState } = $props();
 
+	// The document sits outside the rune graph, so the list has to be read through
+	// `rev` or the icons never redraw and the buttons look dead.
+	const layers = $derived.by(() => {
+		void app.rev;
+		return app.doc.layers.map((l) => ({ ...l }));
+	});
+
 	const counts = $derived.by((): Record<string, number> => {
 		void app.rev;
 		const c: Record<string, number> = {};
@@ -21,7 +28,7 @@
 <section class="border-b border-line p-3">
 	<h2 class="heading mb-2 text-[13px] tracking-wide text-chalk">Lager</h2>
 	<ul class="space-y-0.5">
-		{#each app.doc.layers as l (l.id)}
+		{#each layers as l (l.id)}
 			<li class="flex items-center gap-1.5 text-[12px]">
 				<button
 					type="button"

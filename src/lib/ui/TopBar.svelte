@@ -13,6 +13,11 @@
 	let notice = $state('');
 	let busy = $state(false);
 
+	const projectName = $derived.by(() => {
+		void app.rev;
+		return app.doc.meta.name;
+	});
+
 	/** The picture bytes travel inside the file, or an underlay does not survive a move. */
 	async function collectAssets(): Promise<AssetBlob[]> {
 		const out: AssetBlob[] = [];
@@ -72,7 +77,7 @@
 
 	<input
 		class="ml-2 w-48 rounded bg-transparent px-1.5 py-1 text-[13px] text-chalk outline-none hover:bg-ink focus:bg-ink"
-		value={app.doc.meta.name}
+		value={projectName}
 		aria-label="Projektets namn"
 		onchange={(e) => app.history.run(new SetMeta({ name: e.currentTarget.value }))}
 	/>

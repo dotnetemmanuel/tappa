@@ -36,9 +36,10 @@
 		};
 	}
 
-	const bearing = $derived(
-		formatBearing(angle(sub(plan.cursor, { x: 0, y: 0 })), app.doc.meta.northOffset)
-	);
+	const bearing = $derived.by(() => {
+		void app.rev;
+		return formatBearing(angle(sub(plan.cursor, { x: 0, y: 0 })), app.doc.meta.northOffset);
+	});
 </script>
 
 <footer
