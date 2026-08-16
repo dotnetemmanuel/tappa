@@ -21,3 +21,12 @@ Thumbs.db
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Local Claude settings
+.claude/settings.local.json
+
+# Test and coverage output
+/coverage
+/test-results
+/playwright-report
+/blob-report
