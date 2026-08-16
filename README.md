@@ -33,28 +33,77 @@ web server or opened from disk.
 | `npm run lint` | ESLint |
 | `npm test` | Vitest over the pure core |
 
-## What it does
+## Features
 
-**Survey.** Drop or paste a map screenshot, calibrate it against something whose
-length you know, and trace your plot over it.
+Everything below is built. A tick means it has been driven in a browser and
+seen to work; a dash means the code is there and typechecks but nobody has
+clicked it yet.
 
-**Build.** Walls as a shared-corner graph, so dragging a corner moves both walls.
-Thickness, height, doors and windows cut as real holes, and gable, hipped, mono
-or flat roofs that work over an L-shaped footprint.
+**Drawing and measuring**
 
-**Plant.** 129 species that grow in Swedish zones, with correct mature sizes,
-growth rates, seasonal colour, bloom and fruit months. 44 garden objects from
-pallkrage to badtunna.
+- [x] Plot boundary, drawn as a proper dash-dot property line
+- [x] Type an exact length while drawing: draw a direction, type `4.25`, Enter
+- [x] Length and angle HUD, `Tab` between them, `Shift` for orthogonal
+- [x] Snapping to vertices, endpoints, midpoints, centres, perpendiculars,
+      tangents, extensions, intersections, 15 degree angle lock and a 0,1 m grid,
+      each toggleable
+- [x] Rectangle, polygon, freehand with simplification, and paths with a width
+- [x] Fences and hedges in 8 styles with height
+- [x] Live area and perimeter while drawing
+- [x] Dimensions that attach to geometry and follow it when it moves
+- [x] Text labels
+- [x] Select, move, marquee, vertex dragging, arrow key nudge
+- [x] Undo and redo, with a drag folded into a single step
+- [x] Five layers, each with show and lock
 
-**Measure.** Dimensions attach to the geometry rather than to coordinates, so
-they follow what they measure. Live area and perimeter while you draw.
+**House**
 
-**Study.** Scrub the date, the time of day and the years since planting. Run a
-sun study and get sun hours per day as a heatmap over the plan.
+- [x] Walls as a shared-corner node graph, mitred, with thickness and height
+- [x] Closing a wall run back on its first corner forms a real footprint
+- [x] Doors and windows cut as actual holes in the wall face
+- [x] Gable roof over a footprint, including an L-shape
+- [ ] Hipped, mono and flat roofs
+- [ ] Openings dragged along the wall rather than set by a slider
 
-**Export.** Dimensioned plan PNG with a title block, scale bar and legend, a
-planting list and quantities as CSV, a PDF sheet, and the `.tappa` project file
-with its images inside it.
+**Planting**
+
+- [x] 129 species for Swedish zones, searchable in Swedish, English or Latin,
+      with mature size, growth rate, seasonal colour, bloom and fruit months
+- [x] 44 garden objects, most with adjustable sizes
+- [x] Growth over 0 to 30 years at species-correct rates
+- [x] Plan symbols generated from the same parameters as the 3D form
+- [x] Spacing warnings when canopies grow into each other
+- [ ] Light warnings against a sun study (the code runs, the case is unseen)
+
+**Views**
+
+- [x] Plan, split and 3D
+- [x] Orbit camera, and a walk mode at 1,7 m eye height
+- [ ] WASD movement in walk mode
+- [x] Real sun position, shadows and sky for any date and time at the
+      document latitude
+- [x] Sun hours per day as a heatmap over the plan
+- [ ] Hiding a layer also hiding it in 3D
+
+**Images**
+
+- [x] Drop or paste a map screenshot or aerial photo as a locked underlay
+- [x] Calibrate it against a known length, exact to the millimetre
+- [ ] The two-click calibration interaction (only its maths is verified)
+- [x] Reselect a locked underlay with the image tool
+- [ ] Photo textures on surfaces, and cutout PNG plants, are modelled and
+      stored but have no UI
+
+**Saving and exporting**
+
+- [x] Autosave to IndexedDB, reopening where you left off
+- [x] Dimensioned plan PNG with title block, scale bar, north arrow and legend
+- [x] 3D view PNG, re-rendered at export resolution
+- [x] PDF sheet with a planting list
+- [x] Planting list and quantity takeoff as CSV
+- [x] `.tappa` project file carrying its images inside it
+- [ ] Opening a `.tappa` file through the button
+- [ ] A project browser
 
 ## Keyboard
 
