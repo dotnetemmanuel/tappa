@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { BY_CAT, searchSpecies, SPECIES } from '../core/plants/catalog.js';
-	import { PROPS, PROPS_BY_CAT, searchProps } from '../core/props/catalog.js';
+	import { BY_CAT, searchSpecies, SPECIES, speciesOr } from '../core/plants/catalog.js';
+	import { PROPS, PROPS_BY_CAT, propDefOr, searchProps } from '../core/props/catalog.js';
 	import type { PlantCat } from '../core/plants/types.js';
 	import type { PropCat } from '../core/props/types.js';
 	import type { AppState } from './app.svelte.js';
@@ -35,6 +35,9 @@
 
 	const showProps = $derived(app.tool === 'prop');
 
+	// Picking from this list only arms the tool, so say what the next click does.
+	const chosen = $derived(showProps ? propDefOr(app.activeProp).sv : speciesOr(app.activeSpecies).sv);
+
 	const plantResults = $derived(query.trim() ? searchSpecies(query) : null);
 	const propResults = $derived(query.trim() ? searchProps(query) : null);
 </script>
@@ -48,6 +51,11 @@
 			{showProps ? PROPS.length : SPECIES.length}
 		</span>
 	</div>
+
+	<p class="mx-3 mb-2 rounded bg-ink/70 px-2 py-1.5 text-[12px] leading-snug text-sage">
+		Klicka på ritningen för att placera
+		<span class="text-chalk">{chosen}</span>.
+	</p>
 
 	<div class="px-3 pb-2">
 		<input
