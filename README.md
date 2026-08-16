@@ -25,13 +25,13 @@ npm run dev
 `npm run build` produces a static site in `build/` that can be served from any
 web server or opened from disk.
 
-| Script | What it does |
-| --- | --- |
-| `npm run dev` | Development server |
-| `npm run build` | Static production build |
+| Script          | What it does                      |
+| --------------- | --------------------------------- |
+| `npm run dev`   | Development server                |
+| `npm run build` | Static production build           |
 | `npm run check` | Svelte and TypeScript diagnostics |
-| `npm run lint` | ESLint |
-| `npm test` | Vitest over the pure core |
+| `npm run lint`  | ESLint                            |
+| `npm test`      | Vitest over the pure core         |
 
 ## Features
 
@@ -109,14 +109,14 @@ clicked it yet.
 
 Press `?` in the app for the full sheet.
 
-| Key | Tool |
-| --- | --- |
-| `V` `H` | Select, pan |
-| `B` | Plot boundary |
-| `R` `A` `F` | Rectangle, area, freehand |
+| Key         | Tool                       |
+| ----------- | -------------------------- |
+| `V` `H`     | Select, pan                |
+| `B`         | Plot boundary              |
+| `R` `A` `F` | Rectangle, area, freehand  |
 | `G` `S` `W` | Path, fence or hedge, wall |
-| `P` `O` `I` | Plant, object, image |
-| `M` `T` | Dimension, text |
+| `P` `O` `I` | Plant, object, image       |
+| `M` `T`     | Dimension, text            |
 
 While drawing: type a number for an exact length, `Tab` to switch to the angle,
 `Shift` to lock orthogonal, `Enter` to finish, `Backspace` to undo a point.
