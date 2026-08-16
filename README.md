@@ -1,5 +1,7 @@
 # Täppa
 
+**[Open it](https://dotnetemmanuel.github.io/tappa/)**
+
 A browser-based garden and property planner. Plan-accurate rather than
 photo-collage: you draw your plot to real dimensions, and the same document is
 rendered two ways.
@@ -23,7 +25,13 @@ npm run dev
 ```
 
 `npm run build` produces a static site in `build/` that can be served from any
-web server or opened from disk.
+web server. Asset urls are relative, so it runs from a subpath without extra
+configuration, which is how the GitHub Pages deployment works. Every push to
+`main` runs the checks and publishes.
+
+Your projects live in the browser, tied to the origin serving the app, so a
+project drawn on the published site will not appear in a local build. Move work
+between them with a `.tappa` file.
 
 | Script          | What it does                      |
 | --------------- | --------------------------------- |
