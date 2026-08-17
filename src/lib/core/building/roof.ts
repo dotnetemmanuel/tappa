@@ -153,13 +153,13 @@ function heightOf(
 }
 
 function eaveHeightOf(doc: Doc, roof: RoofEntity): number {
-	let tallest = 0;
+	let tallest = -Infinity;
 	for (const id of roof.over) {
 		const e = findEntity(doc, id);
-		// The eave rides on the finished floor, so raising a house takes its roof with it.
+		// The eave rides on the finished floor, so a house dug into a slope takes its roof down with it.
 		if (e && e.k === 'wall') tallest = Math.max(tallest, (e.floor ?? 0) + e.height);
 	}
-	return tallest > 0 ? tallest : DEFAULT_EAVE;
+	return Number.isFinite(tallest) ? tallest : DEFAULT_EAVE;
 }
 
 function coveredRings(doc: Doc, roof: RoofEntity): Vec2[][] {
