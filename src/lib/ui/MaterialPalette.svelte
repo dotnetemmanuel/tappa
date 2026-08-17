@@ -8,10 +8,8 @@
 	const showFences = $derived(app.tool === 'fence');
 </script>
 
-<section class="border-b border-line p-3">
-	<h2 class="heading mb-2 text-[13px] tracking-wide text-chalk">
-		{showFences ? 'Linjer' : 'Material'}
-	</h2>
+<section class="card p-3">
+	<h2 class="card-title mb-2.5">{showFences ? 'Linjer' : 'Material'}</h2>
 
 	{#if showFences}
 		<div class="grid grid-cols-2 gap-1">
@@ -35,7 +33,7 @@
 			Höjd
 			<span class="flex items-center gap-1">
 				<input
-					class="num w-16 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+					class="num w-16 text-right"
 					type="number"
 					min="0.1"
 					step="0.1"
@@ -71,7 +69,7 @@
 				Bredd
 				<span class="flex items-center gap-1">
 					<input
-						class="num w-16 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+						class="num w-16 text-right"
 						type="number"
 						min="0.2"
 						step="0.1"

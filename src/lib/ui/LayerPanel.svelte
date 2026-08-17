@@ -18,6 +18,8 @@
 		return c;
 	});
 
+	let open = $state(true);
+
 	function toggle(id: string, field: 'visible' | 'locked'): void {
 		app.history.run(
 			new SetLayers(app.doc.layers.map((l) => (l.id === id ? { ...l, [field]: !l[field] } : l)))
@@ -25,14 +27,31 @@
 	}
 </script>
 
-<section class="border-b border-line p-3">
-	<h2 class="heading mb-2 text-[13px] tracking-wide text-chalk">Lager</h2>
-	<ul class="space-y-0.5">
+<section class="card p-3">
+	<button
+		type="button"
+		class="mb-2 flex w-full items-center justify-between text-left"
+		aria-expanded={open}
+		onclick={() => (open = !open)}
+	>
+		<span class="card-title">Lager</span>
+		<svg viewBox="0 0 12 12" class="h-3 w-3 text-sage" aria-hidden="true">
+			<path
+				d={open ? 'M2 7.5 6 3.5 10 7.5' : 'M2 4.5 6 8.5 10 4.5'}
+				fill="none"
+				stroke="currentColor"
+				stroke-width="1.5"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+			/>
+		</svg>
+	</button>
+	<ul class="space-y-0.5" class:hidden={!open}>
 		{#each layers as l (l.id)}
-			<li class="flex items-center gap-1.5 text-[12px]">
+			<li class="flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[12px] hover:bg-raised">
 				<button
 					type="button"
-					class="rounded p-1 text-sage hover:bg-line hover:text-chalk"
+					class="rounded p-1 text-sage hover:text-chalk"
 					aria-pressed={l.visible}
 					title={l.visible ? 'Dölj lagret' : 'Visa lagret'}
 					onclick={() => toggle(l.id, 'visible')}
@@ -59,7 +78,7 @@
 				</button>
 				<button
 					type="button"
-					class="rounded p-1 hover:bg-line hover:text-chalk"
+					class="rounded p-1 hover:text-chalk"
 					class:text-seed={l.locked}
 					class:text-sage={!l.locked}
 					aria-pressed={l.locked}

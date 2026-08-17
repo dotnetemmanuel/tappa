@@ -38,7 +38,7 @@
 <div class="relative">
 	<button
 		type="button"
-		class="rounded px-2 py-1 text-[12px] text-sage hover:bg-line hover:text-chalk"
+		class="rounded-md px-2.5 py-1 text-[12px] text-sage transition-colors hover:bg-bark hover:text-chalk"
 		aria-expanded={open}
 		aria-haspopup="menu"
 		onclick={() => (open = !open)}
@@ -54,13 +54,13 @@
 			onkeydown={(e) => e.key === 'Escape' && (open = false)}
 		></div>
 		<div
-			class="absolute right-0 z-50 mt-1 w-56 rounded-md border border-line bg-bark p-1 shadow-xl shadow-black/40"
+			class="absolute right-0 z-50 mt-1 w-60 rounded-lg border border-line bg-bark p-1 shadow-[var(--lift-pop)]"
 			role="menu"
 		>
 			<button
 				type="button"
 				role="menuitem"
-				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-line hover:text-chalk"
+				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-raised hover:text-chalk"
 				onclick={() =>
 					run('Planritning', async () =>
 						downloadBlob(
@@ -74,7 +74,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-line hover:text-chalk"
+				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-raised hover:text-chalk"
 				onclick={() =>
 					run('Fasadvy', async () =>
 						downloadBlob(
@@ -92,7 +92,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-line hover:text-chalk disabled:opacity-40"
+				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-raised hover:text-chalk disabled:opacity-40"
 				disabled={!sceneCanvas}
 				onclick={() =>
 					run('Vybild', async () => {
@@ -105,7 +105,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-line hover:text-chalk"
+				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-raised hover:text-chalk"
 				onclick={() =>
 					run('PDF', async () =>
 						downloadBlob(
@@ -126,7 +126,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-line hover:text-chalk"
+				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-raised hover:text-chalk"
 				onclick={() => {
 					text(`${stem}-vaxtlista.csv`, plantingListCsv(app.doc));
 					open = false;
@@ -137,7 +137,7 @@
 			<button
 				type="button"
 				role="menuitem"
-				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-line hover:text-chalk"
+				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-raised hover:text-chalk"
 				onclick={() => {
 					text(`${stem}-mangder.csv`, takeoffCsv(app.doc));
 					open = false;

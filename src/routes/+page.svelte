@@ -128,7 +128,8 @@
 				const e = makeImage(asset.id, where, defaultScale(bitmap));
 				app.history.run(new AddEntities([e], 'Bild'));
 				app.select([e.id]);
-				app.status = 'Sätt skalan i panelen. Bilden är låst, tryck I och klicka på den för att välja den igen.';
+				app.status =
+					'Sätt skalan i panelen. Bilden är låst, tryck I och klicka på den för att välja den igen.';
 			} catch (err) {
 				app.status = err instanceof Error ? err.message : 'Kunde inte läsa bilden';
 			}
@@ -216,23 +217,24 @@
 	<div class="flex min-h-0 flex-1">
 		<Toolbar {app} />
 
-		<main class="relative flex min-w-0 flex-1">
+		<!-- The drawing lies on the chrome like a sheet on a blackboard, which is the whole look. -->
+		<main class="relative flex min-w-0 flex-1 gap-2 p-2">
 			{#if app.viewMode === 'elevation'}
-				<div class="min-w-0 flex-1">
+				<div class="min-w-0 flex-1 overflow-hidden rounded-lg shadow-[var(--lift-sheet)]">
 					<ElevationView {app} />
 				</div>
 			{/if}
 
 			{#if app.viewMode !== 'scene' && app.viewMode !== 'elevation'}
-				<div class="relative min-w-0 flex-1">
+				<div class="relative min-w-0 flex-1 overflow-hidden rounded-lg shadow-[var(--lift-sheet)]">
 					<PlanCanvas {app} {plan} />
 
 					{#if isEmpty}
 						<div class="pointer-events-none absolute inset-0 flex items-center justify-center p-8">
 							<div
-								class="max-w-sm rounded-lg border border-line bg-bark/95 p-5 shadow-xl shadow-black/30"
+								class="max-w-sm rounded-xl border border-line bg-bark/95 p-6 shadow-[var(--lift-pop)] backdrop-blur"
 							>
-								<h1 class="heading mb-2 text-[17px] text-chalk">Börja med tomtgränsen</h1>
+								<h1 class="heading mb-3 text-[19px] text-chalk">Börja med tomtgränsen</h1>
 								<p class="mb-3 text-[13px] leading-relaxed text-sage">
 									Välj Tomtgräns i verktygsraden, klicka ut hörnen, och tryck Enter. Medan du ritar
 									kan du skriva in exakt längd och vinkel och trycka Enter för att låsa sträckan.
@@ -251,11 +253,7 @@
 			{/if}
 
 			{#if app.viewMode !== 'plan' && app.viewMode !== 'elevation'}
-				<div
-					class="min-w-0 flex-1"
-					class:border-l={app.viewMode === 'split'}
-					class:border-line={app.viewMode === 'split'}
-				>
+				<div class="min-w-0 flex-1 overflow-hidden rounded-lg shadow-[var(--lift-sheet)]">
 					{#if SceneView}
 						<SceneView {app} />
 					{:else if sceneFailed}
@@ -266,7 +264,9 @@
 				</div>
 			{/if}
 
-			<div class="absolute right-2 top-2 flex gap-1 rounded-md border border-line bg-bark/90 p-0.5">
+			<div
+				class="absolute top-4 right-4 flex gap-0.5 rounded-lg border border-line bg-bark/95 p-1 shadow-[var(--lift-pop)] backdrop-blur"
+			>
 				{#each [['plan', 'Plan'], ['split', 'Delad'], ['scene', '3D'], ['elevation', 'Fasad']] as const as [mode, label] (mode)}
 					<button
 						type="button"

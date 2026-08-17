@@ -40,13 +40,13 @@
 			onclick={() => (open = false)}
 		></button>
 		<div
-			class="relative max-h-full w-full max-w-2xl overflow-y-auto rounded-lg border border-line bg-bark p-5 shadow-2xl shadow-black/50"
+			class="relative max-h-full w-full max-w-2xl overflow-y-auto rounded-xl border border-line bg-bark p-6 shadow-[var(--lift-pop)]"
 		>
 			<div class="mb-4 flex items-baseline justify-between">
-				<h2 class="heading text-[16px] text-chalk">Kortkommandon</h2>
+				<h2 class="heading text-[19px] text-chalk">Kortkommandon</h2>
 				<button
 					type="button"
-					class="rounded px-2 py-1 text-[12px] text-sage hover:bg-line hover:text-chalk"
+					class="rounded px-2 py-1 text-[12px] text-sage hover:bg-raised hover:text-chalk"
 					onclick={() => (open = false)}
 				>
 					Stäng
@@ -55,7 +55,7 @@
 
 			<div class="grid gap-6 sm:grid-cols-3">
 				<section>
-					<h3 class="mb-2 text-[11px] uppercase tracking-wide text-sage/70">Verktyg</h3>
+					<h3 class="mb-2 text-[11px] tracking-wider text-sage/70 uppercase">Verktyg</h3>
 					<dl class="space-y-1">
 						{#each TOOLS as t (t.id)}
 							<div class="flex items-baseline justify-between gap-2 text-[12px]">
@@ -67,7 +67,7 @@
 				</section>
 
 				<section>
-					<h3 class="mb-2 text-[11px] uppercase tracking-wide text-sage/70">Ritande</h3>
+					<h3 class="mb-2 text-[11px] tracking-wider text-sage/70 uppercase">Ritande</h3>
 					<dl class="space-y-1">
 						{#each DRAWING as [key, what] (key)}
 							<div class="flex items-baseline justify-between gap-2 text-[12px]">
@@ -79,7 +79,7 @@
 				</section>
 
 				<section>
-					<h3 class="mb-2 text-[11px] uppercase tracking-wide text-sage/70">Allmänt</h3>
+					<h3 class="mb-2 text-[11px] tracking-wider text-sage/70 uppercase">Allmänt</h3>
 					<dl class="space-y-1">
 						{#each GENERAL as [key, what] (key)}
 							<div class="flex items-baseline justify-between gap-2 text-[12px]">

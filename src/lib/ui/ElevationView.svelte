@@ -295,7 +295,7 @@
 
 	{#if tip}
 		<div
-			class="pointer-events-none absolute rounded border border-line bg-bark/95 px-2 py-1 text-[11px] whitespace-nowrap text-chalk"
+			class="pointer-events-none absolute rounded-md border border-line bg-bark/95 px-2 py-1 text-[11px] whitespace-nowrap text-chalk shadow-[var(--lift-card)]"
 			class:border-seed={tip.live}
 			style:left="{tip.x}px"
 			style:top="{tip.y}px"
@@ -306,7 +306,7 @@
 
 	{#if editing}
 		<input
-			class="num absolute w-24 rounded border border-seed bg-paper px-1.5 py-0.5 text-right text-[12px] text-ink"
+			class="num absolute w-24 rounded-md border border-seed bg-paper px-1.5 text-right text-[12px] text-ink"
 			style:left="{editing.x}px"
 			style:top="{editing.y}px"
 			value={editing.value}
@@ -320,14 +320,18 @@
 		/>
 	{/if}
 
-	<div class="absolute top-2 left-2 flex gap-1 rounded-md bg-bark/90 p-1 text-[12px]">
+	<div
+		class="absolute top-4 left-4 flex gap-0.5 rounded-lg border border-line bg-bark/95 p-1 text-[12px] shadow-[var(--lift-pop)] backdrop-blur"
+	>
 		{#each FACINGS as f (f)}
 			<button
 				type="button"
-				class="rounded px-2 py-1"
+				class="rounded px-2.5 py-1 font-medium transition-colors"
 				class:bg-seed={app.facing === f}
 				class:text-ink={app.facing === f}
 				class:text-sage={app.facing !== f}
+				class:hover:bg-raised={app.facing !== f}
+				class:hover:text-chalk={app.facing !== f}
 				aria-pressed={app.facing === f}
 				onclick={() => (app.facing = f)}
 			>
@@ -336,7 +340,7 @@
 		{/each}
 		<button
 			type="button"
-			class="rounded px-2 py-1 text-sage hover:text-chalk"
+			class="rounded px-2.5 py-1 text-sage transition-colors hover:bg-raised hover:text-chalk"
 			onclick={() => {
 				fit();
 				schedule();
@@ -346,7 +350,7 @@
 		</button>
 	</div>
 
-	<p class="absolute right-2 bottom-2 text-[11px] text-sage">
+	<p class="absolute right-3 bottom-3 max-w-md text-right text-[11px] text-sage">
 		Dra i ändarna för att luta hela tomten. Klicka på marklinjen för att sätta en punkt där, och dra
 		den upp eller ner för att ändra marken just där.
 	</p>

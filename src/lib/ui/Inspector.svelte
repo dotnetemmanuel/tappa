@@ -92,16 +92,24 @@
 	const myChecks = $derived.by(() => {
 		void app.rev;
 		if (!one || !app.showChecks) return [];
-		return runChecks(app.doc, { years: app.years, month: app.month, shadow: app.shadow, field: app.field }).filter(
-			(c) => c.entity === one.id || c.other === one.id
-		);
+		return runChecks(app.doc, {
+			years: app.years,
+			month: app.month,
+			shadow: app.shadow,
+			field: app.field
+		}).filter((c) => c.entity === one.id || c.other === one.id);
 	});
 
 	/** One number for the whole house: written to every wall in the connected run. */
 	function setFloor(wall: WallEntity, floor: number): void {
 		const loop = wallLoops(app.doc).find((l) => l.walls.some((w) => w.id === wall.id));
 		const walls = loop ? loop.walls : [wall];
-		app.history.run(new ReplaceEntities(walls.map((w) => ({ ...w, floor })), 'Golvnivå'));
+		app.history.run(
+			new ReplaceEntities(
+				walls.map((w) => ({ ...w, floor })),
+				'Golvnivå'
+			)
+		);
 	}
 
 	/** How much of the base storey stands clear of the ground, for the house this wall belongs to. */
@@ -140,8 +148,8 @@
 	}
 </script>
 
-<section class="border-t border-line p-3">
-	<h2 class="heading mb-2 text-[13px] tracking-wide text-chalk">Egenskaper</h2>
+<section class="card p-3">
+	<h2 class="card-title mb-2.5">Egenskaper</h2>
 
 	{#if selected.length === 0}
 		<p class="text-[12px] leading-relaxed text-sage">
@@ -152,7 +160,7 @@
 		{#if walls.length >= 2}
 			<button
 				type="button"
-				class="w-full rounded border border-line px-2 py-1 text-[12px] text-sage hover:bg-line hover:text-chalk"
+				class="h-[var(--control-h)] w-full rounded-md border border-line bg-ink text-[12px] text-chalk transition-colors hover:border-seed hover:text-seed"
 				onclick={roofOverSelection}
 			>
 				Lägg tak över {walls.length} väggar
@@ -182,7 +190,7 @@
 				<label class="flex items-center justify-between gap-2">
 					<span class="text-sage">Material</span>
 					<select
-						class="w-32 rounded bg-ink px-1.5 py-1 text-chalk"
+						class="w-32"
 						value={one.mat.id}
 						onchange={(e) =>
 							edit({ ...one, mat: { ...one.mat, id: e.currentTarget.value } }, 'Material')}
@@ -200,7 +208,7 @@
 					<span class="text-sage">Höjd</span>
 					<span class="flex items-center gap-1">
 						<input
-							class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+							class="num w-20 text-right"
 							type="number"
 							step="0.05"
 							value={one.z}
@@ -219,7 +227,6 @@
 					<span class="text-sage">Jämnar marken</span>
 					<input
 						type="checkbox"
-						class="accent-seed"
 						checked={!!one.grade}
 						onchange={(e) =>
 							edit(
@@ -239,7 +246,7 @@
 						<span class="text-sage">Nivå</span>
 						<span class="flex items-center gap-1">
 							<input
-								class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+								class="num w-20 text-right"
 								type="number"
 								step="0.05"
 								value={grade.level}
@@ -255,7 +262,7 @@
 					<label class="flex items-center justify-between gap-2">
 						<span class="text-sage">Kant</span>
 						<select
-							class="w-32 rounded bg-ink px-1.5 py-1 text-chalk"
+							class="w-32"
 							value={grade.edge}
 							onchange={(e) =>
 								edit(
@@ -274,7 +281,7 @@
 						<span class="text-sage">Släntens bredd</span>
 						<span class="flex items-center gap-1">
 							<input
-								class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk disabled:opacity-40"
+								class="num w-20 text-right"
 								type="number"
 								min="0.1"
 								step="0.1"
@@ -297,12 +304,13 @@
 					<span class="text-sage">Bredd</span>
 					<span class="flex items-center gap-1">
 						<input
-							class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+							class="num w-20 text-right"
 							type="number"
 							min="0.1"
 							step="0.05"
 							value={one.width}
-							onchange={(e) => edit({ ...one, width: num(e.currentTarget.value, one.width) }, 'Bredd')}
+							onchange={(e) =>
+								edit({ ...one, width: num(e.currentTarget.value, one.width) }, 'Bredd')}
 						/>
 						<span class="num text-sage">m</span>
 					</span>
@@ -313,7 +321,7 @@
 				<label class="flex items-center justify-between gap-2">
 					<span class="text-sage">Stil</span>
 					<select
-						class="w-32 rounded bg-ink px-1.5 py-1 text-chalk"
+						class="w-32"
 						value={one.style.id}
 						onchange={(e) =>
 							edit({ ...one, style: { ...one.style, id: e.currentTarget.value } }, 'Stil')}
@@ -327,12 +335,13 @@
 					<span class="text-sage">Höjd</span>
 					<span class="flex items-center gap-1">
 						<input
-							class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+							class="num w-20 text-right"
 							type="number"
 							min="0.05"
 							step="0.05"
 							value={one.height}
-							onchange={(e) => edit({ ...one, height: num(e.currentTarget.value, one.height) }, 'Höjd')}
+							onchange={(e) =>
+								edit({ ...one, height: num(e.currentTarget.value, one.height) }, 'Höjd')}
 						/>
 						<span class="num text-sage">m</span>
 					</span>
@@ -344,7 +353,7 @@
 					<span class="text-sage">Tjocklek</span>
 					<span class="flex items-center gap-1">
 						<input
-							class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+							class="num w-20 text-right"
 							type="number"
 							min="0.05"
 							step="0.05"
@@ -359,12 +368,13 @@
 					<span class="text-sage">Höjd</span>
 					<span class="flex items-center gap-1">
 						<input
-							class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+							class="num w-20 text-right"
 							type="number"
 							min="0.5"
 							step="0.1"
 							value={one.height}
-							onchange={(e) => edit({ ...one, height: num(e.currentTarget.value, one.height) }, 'Höjd')}
+							onchange={(e) =>
+								edit({ ...one, height: num(e.currentTarget.value, one.height) }, 'Höjd')}
 						/>
 						<span class="num text-sage">m</span>
 					</span>
@@ -374,7 +384,7 @@
 					<span class="text-sage">Golvnivå</span>
 					<span class="flex items-center gap-1">
 						<input
-							class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+							class="num w-20 text-right"
 							type="number"
 							step="0.05"
 							value={one.floor ?? 0}
@@ -394,14 +404,14 @@
 					<div class="flex gap-1">
 						<button
 							type="button"
-							class="flex-1 rounded border border-line px-2 py-1 text-sage hover:bg-line hover:text-chalk"
+							class="h-[var(--control-h)] flex-1 rounded-md border border-line bg-ink text-[12px] text-chalk transition-colors hover:border-seed hover:text-seed"
 							onclick={() => addOpening('door')}
 						>
 							Dörr
 						</button>
 						<button
 							type="button"
-							class="flex-1 rounded border border-line px-2 py-1 text-sage hover:bg-line hover:text-chalk"
+							class="h-[var(--control-h)] flex-1 rounded-md border border-line bg-ink text-[12px] text-chalk transition-colors hover:border-seed hover:text-seed"
 							onclick={() => addOpening('window')}
 						>
 							Fönster
@@ -416,7 +426,7 @@
 								{op.type === 'door' ? 'Dörr' : 'Fönster'}
 							</span>
 							<input
-								class="flex-1 accent-[var(--color-seed)]"
+								class="flex-1"
 								type="range"
 								min="0.05"
 								max="0.95"
@@ -433,7 +443,10 @@
 								class="rounded px-1 text-sage hover:text-[#c2543a]"
 								aria-label="Ta bort öppningen"
 								onclick={() =>
-									edit({ ...one, openings: one.openings.filter((x) => x.id !== op.id) }, 'Ta bort öppning')}
+									edit(
+										{ ...one, openings: one.openings.filter((x) => x.id !== op.id) },
+										'Ta bort öppning'
+									)}
 							>
 								×
 							</button>
@@ -446,7 +459,7 @@
 				<label class="flex items-center justify-between gap-2">
 					<span class="text-sage">Typ</span>
 					<select
-						class="w-32 rounded bg-ink px-1.5 py-1 text-chalk"
+						class="w-32"
 						value={one.type}
 						onchange={(e) =>
 							edit({ ...one, type: e.currentTarget.value as typeof one.type }, 'Taktyp')}
@@ -461,7 +474,7 @@
 					<span class="text-sage">Lutning</span>
 					<span class="flex items-center gap-1">
 						<input
-							class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+							class="num w-20 text-right"
 							type="number"
 							min="0"
 							max="60"
@@ -476,7 +489,7 @@
 				<label class="flex items-center justify-between gap-2">
 					<span class="text-sage">Nockriktning</span>
 					<input
-						class="flex-1 accent-[var(--color-seed)]"
+						class="flex-1"
 						type="range"
 						min="0"
 						max="179"
@@ -489,7 +502,7 @@
 					<span class="text-sage">Takutsprång</span>
 					<span class="flex items-center gap-1">
 						<input
-							class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+							class="num w-20 text-right"
 							type="number"
 							min="0"
 							step="0.05"
@@ -525,13 +538,16 @@
 				<label class="flex items-center justify-between gap-2">
 					<span class="text-sage">Planterad år</span>
 					<input
-						class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+						class="num w-20 text-right"
 						type="number"
 						min="0"
 						max="30"
 						value={one.plantedYear}
 						onchange={(e) =>
-							edit({ ...one, plantedYear: num(e.currentTarget.value, one.plantedYear) }, 'Planterad')}
+							edit(
+								{ ...one, plantedYear: num(e.currentTarget.value, one.plantedYear) },
+								'Planterad'
+							)}
 					/>
 				</label>
 			{/if}
@@ -548,7 +564,7 @@
 						<span class="text-sage">{p.sv}</span>
 						<span class="flex items-center gap-1">
 							<input
-								class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+								class="num w-20 text-right"
 								type="number"
 								min={p.min}
 								max={p.max}
@@ -570,7 +586,7 @@
 				<label class="flex items-center justify-between gap-2">
 					<span class="text-sage">Vridning</span>
 					<input
-						class="flex-1 accent-[var(--color-seed)]"
+						class="flex-1"
 						type="range"
 						min="0"
 						max="360"
@@ -586,7 +602,7 @@
 				<label class="flex items-center justify-between gap-2">
 					<span class="text-sage">Genomskinlighet</span>
 					<input
-						class="flex-1 accent-[var(--color-seed)]"
+						class="flex-1"
 						type="range"
 						min="0.1"
 						max="1"
@@ -598,7 +614,7 @@
 				<label class="flex items-center justify-between gap-2">
 					<span class="text-sage">Vridning</span>
 					<input
-						class="flex-1 accent-[var(--color-seed)]"
+						class="flex-1"
 						type="range"
 						min="0"
 						max="360"
@@ -634,8 +650,8 @@
 					Sätt skala
 				</button>
 				<p class="text-[11px] leading-relaxed text-sage">
-					Rita en linje över något du vet längden på, till exempel en tomtgräns eller ett
-					staket, och skriv in måttet.
+					Rita en linje över något du vet längden på, till exempel en tomtgräns eller ett staket,
+					och skriv in måttet.
 				</p>
 			{/if}
 

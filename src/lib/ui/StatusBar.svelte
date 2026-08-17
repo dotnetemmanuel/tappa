@@ -42,9 +42,7 @@
 	});
 </script>
 
-<footer
-	class="flex h-8 shrink-0 items-center gap-3 border-t border-line bg-bark px-3 text-[11px] text-sage"
->
+<footer class="flex h-8 shrink-0 items-center gap-3 bg-ink px-3 text-[11px] text-sage">
 	<span class="num tabular-nums">
 		{plan.cursor.x.toFixed(2).replace('.', ',')}, {plan.cursor.y.toFixed(2).replace('.', ',')} m
 	</span>
@@ -55,7 +53,7 @@
 	<span class="num">1 m = {app.view.scale.toFixed(0)} px</span>
 	<button
 		type="button"
-		class="rounded px-1.5 py-0.5 hover:bg-line hover:text-chalk"
+		class="rounded px-1.5 py-0.5 transition-colors hover:bg-bark hover:text-chalk"
 		onclick={() => app.zoomToFit()}
 	>
 		Anpassa

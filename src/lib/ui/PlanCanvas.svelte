@@ -17,7 +17,12 @@
 	const checks = $derived.by((): Check[] => {
 		void app.rev;
 		if (!app.showChecks) return [];
-		return runChecks(app.doc, { years: app.years, month: app.month, shadow: app.shadow, field: app.field });
+		return runChecks(app.doc, {
+			years: app.years,
+			month: app.month,
+			shadow: app.shadow,
+			field: app.field
+		});
 	});
 
 	function schedule(): void {

@@ -29,7 +29,7 @@
 
 {#if plan.hud.visible}
 	<div
-		class="pointer-events-auto absolute z-20 flex items-center gap-1 rounded-md border border-line/80 bg-bark/95 px-1.5 py-1 shadow-lg shadow-black/40 backdrop-blur"
+		class="pointer-events-auto absolute z-20 flex items-center gap-1 rounded-lg border border-line bg-bark/95 px-1.5 py-1 shadow-[var(--lift-pop)] backdrop-blur"
 		style:left="{plan.hud.at.x}px"
 		style:top="{plan.hud.at.y}px"
 	>
@@ -37,7 +37,7 @@
 		<input
 			id="hud-length"
 			bind:this={lengthEl}
-			class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-[13px] text-chalk outline-none ring-1 ring-inset ring-transparent focus:ring-seed"
+			class="num w-20 text-right text-[13px] ring-1 ring-transparent ring-inset focus:ring-seed"
 			class:ring-seed={plan.hud.lengthLocked}
 			value={plan.hud.length}
 			inputmode="decimal"
@@ -54,7 +54,7 @@
 		<input
 			id="hud-angle"
 			bind:this={angleEl}
-			class="num w-16 rounded bg-ink px-1.5 py-0.5 text-right text-[13px] text-chalk outline-none ring-1 ring-inset ring-transparent focus:ring-seed"
+			class="num w-16 text-right text-[13px] ring-1 ring-transparent ring-inset focus:ring-seed"
 			class:ring-seed={plan.hud.angleLocked}
 			value={plan.hud.angle}
 			inputmode="decimal"

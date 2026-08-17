@@ -3,6 +3,17 @@
 
 	let { app }: { app: AppState } = $props();
 
+	/** Grouped by what you are doing: choosing, drawing ground, building, planting, noting. */
+	const GROUPS: ToolId[][] = [
+		['select', 'pan'],
+		['plot', 'rect', 'polygon', 'freehand', 'path'],
+		['spot', 'fence', 'wall'],
+		['plant', 'prop'],
+		['image', 'dim', 'text']
+	];
+
+	const tool = (id: ToolId) => TOOLS.find((t) => t.id === id);
+
 	const ICONS: Record<ToolId, string> = {
 		select: 'M4 2 L14 10 L9 11 L11.5 15.5 L9.5 16.5 L7 12 L4 15 Z',
 		pan: 'M9 2 v7 M6 4 v6 M12 4 v6 M4 8 v3 a5 5 0 0 0 10 0 V6',
@@ -22,32 +33,48 @@
 	};
 </script>
 
-<nav class="flex flex-col gap-1 border-r border-line bg-bark p-1.5" aria-label="Verktyg">
-	{#each TOOLS as t (t.id)}
-		<button
-			type="button"
-			class="group relative flex h-9 w-9 items-center justify-center rounded-md transition-colors"
-			class:bg-seed={app.tool === t.id}
-			class:text-ink={app.tool === t.id}
-			class:text-sage={app.tool !== t.id}
-			class:hover:bg-line={app.tool !== t.id}
-			class:hover:text-chalk={app.tool !== t.id}
-			aria-pressed={app.tool === t.id}
-			title="{t.sv}  ({t.key.toUpperCase()})"
-			onclick={() => app.setTool(t.id)}
-		>
-			<svg viewBox="0 0 18 18" class="h-[18px] w-[18px]" aria-hidden="true">
-				<path
-					d={ICONS[t.id]}
-					fill={t.id === 'select' ? 'currentColor' : 'none'}
-					stroke="currentColor"
-					stroke-width="1.4"
-					stroke-linejoin="round"
-					stroke-linecap="round"
-				/>
-			</svg>
-			<span class="sr-only">{t.sv}</span>
-		</button>
+<nav class="flex flex-col gap-1 bg-ink px-1.5 py-2" aria-label="Verktyg">
+	{#each GROUPS as group, gi (gi)}
+		{#if gi > 0}
+			<span class="mx-auto my-1 h-px w-6 bg-line"></span>
+		{/if}
+		{#each group as id (id)}
+			{@const t = tool(id)}
+			{#if t}
+				<button
+					type="button"
+					class="group relative flex h-9 w-9 items-center justify-center rounded-md transition-colors"
+					class:bg-seed={app.tool === t.id}
+					class:text-ink={app.tool === t.id}
+					class:text-sage={app.tool !== t.id}
+					class:hover:bg-raised={app.tool !== t.id}
+					class:hover:text-chalk={app.tool !== t.id}
+					aria-pressed={app.tool === t.id}
+					onclick={() => app.setTool(t.id)}
+				>
+					<svg viewBox="0 0 18 18" class="h-[18px] w-[18px]" aria-hidden="true">
+						<path
+							d={ICONS[t.id]}
+							fill={t.id === 'select' ? 'currentColor' : 'none'}
+							stroke="currentColor"
+							stroke-width="1.4"
+							stroke-linejoin="round"
+							stroke-linecap="round"
+						/>
+					</svg>
+					<span class="sr-only">{t.sv}</span>
+					<!-- The rail is icons only, so the name and its key have to be one hover away. -->
+					<span
+						class="pointer-events-none absolute left-full z-50 ml-2 hidden items-center gap-2 rounded-md border border-line bg-bark px-2 py-1 whitespace-nowrap shadow-[var(--lift-pop)] group-hover:flex"
+					>
+						<span class="text-[12px] text-chalk">{t.sv}</span>
+						<kbd class="num rounded border border-line bg-ink px-1 text-[11px] text-sage">
+							{t.key.toUpperCase()}
+						</kbd>
+					</span>
+				</button>
+			{/if}
+		{/each}
 	{/each}
 </nav>
 

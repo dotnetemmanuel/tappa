@@ -77,10 +77,12 @@
 			</p>
 		</div>
 	{:else}
-		<div class="absolute left-2 top-2 flex gap-1 rounded-md border border-line bg-bark/90 p-0.5">
+		<div
+			class="absolute top-4 left-4 flex gap-0.5 rounded-lg border border-line bg-bark/95 p-1 shadow-[var(--lift-pop)] backdrop-blur"
+		>
 			<button
 				type="button"
-				class="rounded px-2 py-1 text-[12px]"
+				class="rounded px-2.5 py-1 text-[12px] font-medium transition-colors"
 				class:bg-seed={mode === 'orbit'}
 				class:text-ink={mode === 'orbit'}
 				class:text-sage={mode !== 'orbit'}
@@ -91,7 +93,7 @@
 			</button>
 			<button
 				type="button"
-				class="rounded px-2 py-1 text-[12px]"
+				class="rounded px-2.5 py-1 text-[12px] font-medium transition-colors"
 				class:bg-seed={mode === 'walk'}
 				class:text-ink={mode === 'walk'}
 				class:text-sage={mode !== 'walk'}
@@ -102,7 +104,7 @@
 			</button>
 			<button
 				type="button"
-				class="rounded px-2 py-1 text-[12px] text-sage hover:text-chalk"
+				class="rounded px-2.5 py-1 text-[12px] text-sage transition-colors hover:bg-raised hover:text-chalk"
 				onclick={() => scene?.frameAll()}
 			>
 				Anpassa
@@ -111,7 +113,7 @@
 
 		{#if mode === 'walk'}
 			<p
-				class="num absolute bottom-2 left-2 rounded bg-bark/90 px-2 py-1 text-[11px] text-sage"
+				class="num absolute bottom-3 left-3 rounded-md border border-line bg-bark/95 px-2 py-1 text-[11px] text-sage"
 			>
 				WASD går · dra för att titta · Skift springer · ögonhöjd 1,7 m
 			</p>

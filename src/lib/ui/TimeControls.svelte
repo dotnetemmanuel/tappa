@@ -79,16 +79,16 @@
 	}
 </script>
 
-<section class="border-b border-line p-3">
-	<h2 class="heading mb-2 text-[13px] tracking-wide text-chalk">Tid och sol</h2>
+<section class="card p-3">
+	<h2 class="card-title mb-2.5">Tid och sol</h2>
 
-	<label class="mb-2 block">
+	<label class="mb-3 block">
 		<span class="mb-1 flex items-baseline justify-between text-[12px] text-sage">
 			Datum
 			<span class="num text-chalk">{app.when.getDate()} {MONTHS[app.when.getMonth()]}</span>
 		</span>
 		<input
-			class="w-full accent-[var(--color-seed)]"
+			class="w-full"
 			type="range"
 			min="0"
 			max="364"
@@ -97,13 +97,13 @@
 		/>
 	</label>
 
-	<label class="mb-2 block">
+	<label class="mb-3 block">
 		<span class="mb-1 flex items-baseline justify-between text-[12px] text-sage">
 			Tid
 			<span class="num text-chalk">{clock(app.when)}</span>
 		</span>
 		<input
-			class="w-full accent-[var(--color-seed)]"
+			class="w-full"
 			type="range"
 			min="0"
 			max="1439"
@@ -121,25 +121,18 @@
 		{/if}
 	</p>
 
-	<label class="mb-2 block">
+	<label class="mb-3 block">
 		<span class="mb-1 flex items-baseline justify-between text-[12px] text-sage">
 			År sedan plantering
 			<span class="num text-chalk">{app.years}</span>
 		</span>
-		<input
-			class="w-full accent-[var(--color-seed)]"
-			type="range"
-			min="0"
-			max="30"
-			step="1"
-			bind:value={app.years}
-		/>
+		<input class="w-full" type="range" min="0" max="30" step="1" bind:value={app.years} />
 	</label>
 
 	<div class="flex items-center gap-2">
 		<button
 			type="button"
-			class="flex-1 rounded border border-line px-2 py-1 text-[12px] text-sage hover:bg-line hover:text-chalk disabled:opacity-50"
+			class="h-[var(--control-h)] flex-1 rounded-md border border-line bg-ink text-[12px] text-chalk transition-colors hover:border-seed hover:text-seed disabled:opacity-50"
 			disabled={app.shadowBusy}
 			onclick={runStudy}
 		>
@@ -147,7 +140,7 @@
 		</button>
 		{#if app.shadow}
 			<label class="flex items-center gap-1.5 text-[12px] text-sage">
-				<input type="checkbox" class="accent-[var(--color-seed)]" bind:checked={app.showShadow} />
+				<input type="checkbox" bind:checked={app.showShadow} />
 				Visa
 			</label>
 		{/if}

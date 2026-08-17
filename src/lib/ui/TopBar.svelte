@@ -82,20 +82,21 @@
 	}
 </script>
 
-<header class="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-bark px-3">
-	<span class="heading text-[15px] text-seed">Täppa</span>
+<header class="flex h-11 shrink-0 items-center gap-2 bg-ink px-3">
+	<span class="heading text-[17px] text-seed">Täppa</span>
 
+	<!-- The project name is text you can just type over, so it carries no box until you touch it. -->
 	<input
-		class="ml-2 w-48 rounded bg-transparent px-1.5 py-1 text-[13px] text-chalk outline-none hover:bg-ink focus:bg-ink"
+		class="ml-3 w-52 rounded-md border border-transparent bg-transparent px-2 text-[13px] text-chalk hover:border-line hover:bg-bark focus:border-line focus:bg-bark"
 		value={projectName}
 		aria-label="Projektets namn"
 		onchange={(e) => app.history.run(new SetMeta({ name: e.currentTarget.value }))}
 	/>
 
-	<div class="ml-2 flex items-center gap-0.5">
+	<div class="ml-1 flex items-center gap-0.5">
 		<button
 			type="button"
-			class="rounded px-2 py-1 text-[12px] text-sage enabled:hover:bg-line enabled:hover:text-chalk disabled:opacity-40"
+			class="rounded-md px-2 py-1 text-[12px] text-sage transition-colors enabled:hover:bg-bark enabled:hover:text-chalk disabled:opacity-35"
 			disabled={!app.canUndo}
 			title="Ångra (Ctrl+Z)"
 			onclick={() => app.undo()}
@@ -104,7 +105,7 @@
 		</button>
 		<button
 			type="button"
-			class="rounded px-2 py-1 text-[12px] text-sage enabled:hover:bg-line enabled:hover:text-chalk disabled:opacity-40"
+			class="rounded-md px-2 py-1 text-[12px] text-sage transition-colors enabled:hover:bg-bark enabled:hover:text-chalk disabled:opacity-35"
 			disabled={!app.canRedo}
 			title="Gör om (Ctrl+Shift+Z)"
 			onclick={() => app.redo()}
@@ -122,14 +123,14 @@
 
 		<button
 			type="button"
-			class="rounded px-2 py-1 text-[12px] text-sage hover:bg-line hover:text-chalk"
+			class="rounded-md px-2.5 py-1 text-[12px] text-sage transition-colors hover:bg-bark hover:text-chalk"
 			onclick={newProject}
 		>
 			Nytt
 		</button>
 		<button
 			type="button"
-			class="rounded px-2 py-1 text-[12px] text-sage hover:bg-line hover:text-chalk"
+			class="rounded-md px-2.5 py-1 text-[12px] text-sage transition-colors hover:bg-bark hover:text-chalk"
 			onclick={() => fileInput?.click()}
 		>
 			Öppna
@@ -137,7 +138,7 @@
 		<ExportMenu {app} sceneCanvas={app.sceneCanvas} />
 		<button
 			type="button"
-			class="rounded bg-seed px-2.5 py-1 text-[12px] font-medium text-ink hover:brightness-110 disabled:opacity-60"
+			class="rounded-md bg-seed px-3 py-1 text-[12px] font-medium text-ink shadow-[var(--lift-card)] transition-[filter] hover:brightness-110 disabled:opacity-60"
 			disabled={busy}
 			onclick={exportTappa}
 		>

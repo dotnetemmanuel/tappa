@@ -36,30 +36,30 @@
 	const showProps = $derived(app.tool === 'prop');
 
 	// Picking from this list only arms the tool, so say what the next click does.
-	const chosen = $derived(showProps ? propDefOr(app.activeProp).sv : speciesOr(app.activeSpecies).sv);
+	const chosen = $derived(
+		showProps ? propDefOr(app.activeProp).sv : speciesOr(app.activeSpecies).sv
+	);
 
 	const plantResults = $derived(query.trim() ? searchSpecies(query) : null);
 	const propResults = $derived(query.trim() ? searchProps(query) : null);
 </script>
 
-<section class="flex flex-col border-b border-line">
-	<div class="flex items-center gap-2 px-3 pb-2 pt-3">
-		<h2 class="heading text-[13px] tracking-wide text-chalk">
-			{showProps ? 'Föremål' : 'Växter'}
-		</h2>
+<section class="card flex flex-col">
+	<div class="flex items-center gap-2 px-3 pt-3 pb-2.5">
+		<h2 class="card-title">{showProps ? 'Föremål' : 'Växter'}</h2>
 		<span class="num text-[11px] text-sage">
 			{showProps ? PROPS.length : SPECIES.length}
 		</span>
 	</div>
 
-	<p class="mx-3 mb-2 rounded bg-ink/70 px-2 py-1.5 text-[12px] leading-snug text-sage">
+	<p class="mx-3 mb-2 rounded-md bg-ink px-2 py-1.5 text-[12px] leading-snug text-sage">
 		Klicka på ritningen för att placera
 		<span class="text-chalk">{chosen}</span>.
 	</p>
 
 	<div class="px-3 pb-2">
 		<input
-			class="w-full rounded bg-ink px-2 py-1 text-[12px] text-chalk placeholder:text-sage/70"
+			class="w-full text-[12px] placeholder:text-sage/70"
 			placeholder={showProps ? 'Sök föremål' : 'Sök art, svenskt eller latin'}
 			bind:value={query}
 			aria-label="Sök"
@@ -75,7 +75,7 @@
 							<button
 								type="button"
 								class="w-full rounded px-1.5 py-1 text-left text-[12px] transition-colors"
-								class:bg-line={app.activeProp === p.id}
+								class:bg-raised={app.activeProp === p.id}
 								class:text-chalk={app.activeProp === p.id}
 								class:text-sage={app.activeProp !== p.id}
 								onclick={() => {
@@ -99,7 +99,7 @@
 								<button
 									type="button"
 									class="w-full rounded px-1.5 py-1 text-left text-[12px] transition-colors"
-									class:bg-line={app.activeProp === p.id}
+									class:bg-raised={app.activeProp === p.id}
 									class:text-chalk={app.activeProp === p.id}
 									class:text-sage={app.activeProp !== p.id}
 									onclick={() => {
@@ -121,15 +121,13 @@
 						<button
 							type="button"
 							class="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left transition-colors"
-							class:bg-line={app.activeSpecies === sp.id}
+							class:bg-raised={app.activeSpecies === sp.id}
 							onclick={() => {
 								app.activeSpecies = sp.id;
 								app.setTool('plant');
 							}}
 						>
-							<span
-								class="h-3 w-3 shrink-0 rounded-full"
-								style:background={sp.foliage.summer}
+							<span class="h-3 w-3 shrink-0 rounded-full" style:background={sp.foliage.summer}
 							></span>
 							<span class="min-w-0 flex-1">
 								<span
@@ -153,15 +151,13 @@
 							<button
 								type="button"
 								class="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left transition-colors"
-								class:bg-line={app.activeSpecies === sp.id}
+								class:bg-raised={app.activeSpecies === sp.id}
 								onclick={() => {
 									app.activeSpecies = sp.id;
 									app.setTool('plant');
 								}}
 							>
-								<span
-									class="h-3 w-3 shrink-0 rounded-full"
-									style:background={sp.foliage.summer}
+								<span class="h-3 w-3 shrink-0 rounded-full" style:background={sp.foliage.summer}
 								></span>
 								<span class="min-w-0 flex-1">
 									<span
