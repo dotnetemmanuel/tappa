@@ -5,6 +5,8 @@ import { dedupe } from '../geom/polygon.js';
 import { rectEmpty, rectFromPoints, rectOverlaps, type Rect, type Vec2 } from '../geom/vec2.js';
 import { SPECIES, speciesOr } from '../plants/catalog.js';
 import { sizeAt } from '../plants/growth.js';
+import { heightAt, type HeightField } from '../terrain/field.js';
+import { groundUnder } from '../terrain/query.js';
 import { daySamples, sunAt, sunTimes } from './position.js';
 
 /** Anything that can block the sun, kept deliberately crude. */
@@ -21,7 +23,12 @@ const UNKNOWN_CANOPY: Canopy = { mature: { h: 4, w: 3 }, growthRate: 12, evergre
 
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
 
-function plantOccluder(e: PlantEntity, ageYears: number, month: number): Occluder | null {
+function plantOccluder(
+	e: PlantEntity,
+	ageYears: number,
+	month: number,
+	field: HeightField | null
+): Occluder | null {
 	const known = CANOPIES.get(e.species);
 	// One growth curve for the whole app, or the sun study and the 3D view disagree.
 	const size = known ? sizeAt(speciesOr(e.species), ageYears, e.sizeJitter) : fallbackSize(ageYears, e);
@@ -30,11 +37,12 @@ function plantOccluder(e: PlantEntity, ageYears: number, month: number): Occlude
 	const width = size.w;
 	if (height < 0.3) return null;
 	// A plant tall enough to walk under carries its crown on a stem; a shrub sits on the ground.
-	const base = height >= 3 ? height * 0.3 : 0;
+	const g = heightAt(field, e.at.x, e.at.y);
+	const base = g + (height >= 3 ? height * 0.3 : 0);
 	const leafless = !sp.evergreen && (month <= 3 || month >= 11);
 	const r = (width / 2) * (leafless ? 0.45 : 1);
 	if (r < 0.15) return null;
-	return { o: 'ellipsoid', centre: e.at, base, top: height, rx: r, rz: r };
+	return { o: 'ellipsoid', centre: e.at, base, top: g + height, rx: r, rz: r };
 }
 
 function fallbackSize(ageYears: number, e: PlantEntity): { h: number; w: number } {
@@ -51,16 +59,24 @@ function tryBuildRoof(doc: Doc, roof: RoofEntity): RoofResult | null {
 	}
 }
 
-function buildOccluders(doc: Doc, ageOf: (p: PlantEntity) => number, month: number): Occluder[] {
+function buildOccluders(
+	doc: Doc,
+	ageOf: (p: PlantEntity) => number,
+	month: number,
+	field: HeightField | null
+): Occluder[] {
 	const out: Occluder[] = [];
 	for (const e of doc.entities) {
 		if (e.k === 'wall' || e.k === 'line') {
 			const ring = entityRing(doc, e);
 			if (ring && ring.length >= 3 && e.height > 0.05) {
-				out.push({ o: 'prism', ring, base: 0, top: e.height });
+				const g = groundUnder(field, ring);
+				// A wall runs from the ground to its own floor plus height; a fence rides the slope.
+				const top = e.k === 'wall' ? (e.floor ?? 0) + e.height : g.max + e.height;
+				out.push({ o: 'prism', ring, base: g.min, top });
 			}
 		} else if (e.k === 'plant') {
-			const o = plantOccluder(e, ageOf(e), month);
+			const o = plantOccluder(e, ageOf(e), month, field);
 			if (o) out.push(o);
 		} else if (e.k === 'roof') {
 			// A roof that will not build costs its own shadow, not the whole study.
@@ -75,16 +91,24 @@ function buildOccluders(doc: Doc, ageOf: (p: PlantEntity) => number, month: numb
 }
 
 /** Build occluders from the document at a given plant age. */
-export function occludersOf(doc: Doc, opts: { years: number; month: number }): Occluder[] {
-	return buildOccluders(doc, () => Math.max(0, opts.years), clamp(opts.month, 1, 12));
+export function occludersOf(
+	doc: Doc,
+	opts: { years: number; month: number; field?: HeightField | null }
+): Occluder[] {
+	return buildOccluders(doc, () => Math.max(0, opts.years), clamp(opts.month, 1, 12), opts.field ?? null);
 }
 
-function occludersForDay(doc: Doc, day: Date, years?: number): Occluder[] {
+function occludersForDay(
+	doc: Doc,
+	day: Date,
+	field: HeightField | null,
+	years?: number
+): Occluder[] {
 	const age =
 		years === undefined
 			? (p: PlantEntity) => Math.max(0, day.getFullYear() - p.plantedYear)
 			: (p: PlantEntity) => Math.max(0, years - p.plantedYear);
-	return buildOccluders(doc, age, day.getMonth() + 1);
+	return buildOccluders(doc, age, day.getMonth() + 1, field);
 }
 
 export type ShadowGrid = {
@@ -111,6 +135,8 @@ export type ShadowOptions = {
 	years?: number;
 	/** Called with 0 to 1 so a long study can show progress and stay responsive. */
 	onProgress?: (t: number) => void;
+	/** The baked ground. Absent means flat, and the study then costs exactly what it did before. */
+	field?: HeightField | null;
 };
 
 type PrismPrep = {
@@ -201,6 +227,7 @@ function prismBlocks(
 	q: PrismPrep,
 	px: number,
 	py: number,
+	pz: number,
 	hx: number,
 	hy: number,
 	tanAlt: number
@@ -228,8 +255,8 @@ function prismBlocks(
 	}
 	if (crossings === 0) return false;
 	const inside = (crossings & 1) === 1;
-	const zEnter = inside ? 0 : enter * tanAlt;
-	const zExit = exit * tanAlt;
+	const zEnter = pz + (inside ? 0 : enter * tanAlt);
+	const zExit = pz + exit * tanAlt;
 	return zExit >= q.base && zEnter <= q.top;
 }
 
@@ -237,6 +264,7 @@ function ellipsoidBlocks(
 	q: EllipsoidPrep,
 	px: number,
 	py: number,
+	pz: number,
 	hx: number,
 	hy: number,
 	cosAlt: number,
@@ -244,7 +272,7 @@ function ellipsoidBlocks(
 ): boolean {
 	const ox = (px - q.cx) / q.rx;
 	const oy = (py - q.cy) / q.rz;
-	const oz = -q.cz / q.ry;
+	const oz = (pz - q.cz) / q.ry;
 	const c = ox * ox + oy * oy + oz * oz - 1;
 	if (c <= 0) return true;
 	const dx = (hx * cosAlt) / q.rx;
@@ -257,6 +285,25 @@ function ellipsoidBlocks(
 	return (-b - Math.sqrt(disc)) / (2 * a) > 1e-6;
 }
 
+/** How far and how coarsely the land is asked whether it shades itself. Cheap on purpose. */
+const LAND_REACH = 60;
+const LAND_STEP = 1;
+
+function landBlocks(
+	f: HeightField,
+	px: number,
+	py: number,
+	pz: number,
+	hx: number,
+	hy: number,
+	tanAlt: number
+): boolean {
+	for (let d = LAND_STEP; d <= LAND_REACH; d += LAND_STEP) {
+		if (heightAt(f, px + hx * d, py + hy * d) > pz + d * tanAlt) return true;
+	}
+	return false;
+}
+
 type Sweep = { hours: Float32Array; dayLength: number; maxHours: number };
 
 /** Walk the day once per sample time, marking which of the given points can see the sun. */
@@ -267,6 +314,7 @@ function sweep(
 	xs: Float64Array,
 	ys: Float64Array,
 	area: Rect,
+	field: HeightField | null,
 	onProgress?: (t: number) => void,
 	years?: number
 ): Sweep {
@@ -279,7 +327,9 @@ function sweep(
 		onProgress?.(1);
 		return { hours, dayLength, maxHours: 0 };
 	}
-	const preps = prepare(occludersForDay(doc, day, years));
+	const preps = prepare(occludersForDay(doc, day, field, years));
+	const zs = new Float64Array(xs.length);
+	if (field) for (let i = 0; i < xs.length; i++) zs[i] = heightAt(field, xs[i], ys[i]);
 	const act: Prep[] = [];
 	const reach: number[] = [];
 	for (let si = 0; si <= last; si++) {
@@ -313,13 +363,14 @@ function sweep(
 			act.push(q);
 			reach.push(throwLen);
 		}
-		if (act.length === 0) {
+		if (act.length === 0 && !field) {
 			for (let i = 0; i < hours.length; i++) hours[i] += share;
 			continue;
 		}
 		for (let i = 0; i < xs.length; i++) {
 			const px = xs[i];
 			const py = ys[i];
+			const pz = zs[i];
 			let lit = true;
 			for (let k = 0; k < act.length; k++) {
 				const q = act[k];
@@ -330,13 +381,14 @@ function sweep(
 				if (Math.abs(-dx * hy + dy * hx) > q.r) continue;
 				const hit =
 					q.o === 'prism'
-						? prismBlocks(q, px, py, hx, hy, tanAlt)
-						: ellipsoidBlocks(q, px, py, hx, hy, cosAlt, sinAlt);
+						? prismBlocks(q, px, py, pz, hx, hy, tanAlt)
+						: ellipsoidBlocks(q, px, py, pz, hx, hy, cosAlt, sinAlt);
 				if (hit) {
 					lit = false;
 					break;
 				}
 			}
+			if (lit && field && landBlocks(field, px, py, pz, hx, hy, tanAlt)) lit = false;
 			if (lit) hours[i] += share;
 		}
 	}
@@ -388,7 +440,7 @@ export function shadowStudy(doc: Doc, o: ShadowOptions): ShadowGrid {
 		min: origin,
 		max: { x: origin.x + cols * cell, y: origin.y + rows * cell }
 	};
-	const s = sweep(doc, o.day, o.stepMinutes, xs, ys, covered, o.onProgress, o.years);
+	const s = sweep(doc, o.day, o.stepMinutes, xs, ys, covered, o.field ?? null, o.onProgress, o.years);
 	return {
 		origin,
 		cell,
@@ -405,7 +457,7 @@ export function sunHoursAt(doc: Doc, at: Vec2, o: Omit<ShadowOptions, 'cell' | '
 	const xs = new Float64Array([at.x]);
 	const ys = new Float64Array([at.y]);
 	const area: Rect = { min: { x: at.x, y: at.y }, max: { x: at.x, y: at.y } };
-	return sweep(doc, o.day, o.stepMinutes, xs, ys, area, o.onProgress, o.years).hours[0];
+	return sweep(doc, o.day, o.stepMinutes, xs, ys, area, o.field ?? null, o.onProgress, o.years).hours[0];
 }
 
 /** Sample the grid at a plan point; returns null outside it. */

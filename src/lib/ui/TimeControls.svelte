@@ -66,7 +66,8 @@
 				day: app.when,
 				stepMinutes: 15,
 				cell: 0.5,
-				years: app.years
+				years: app.years,
+				field: app.field
 			});
 			app.showShadow = true;
 			app.status = `Soltimmar den ${app.when.getDate()} ${MONTHS[app.when.getMonth()]}`;
