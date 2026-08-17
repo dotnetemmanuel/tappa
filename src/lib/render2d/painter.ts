@@ -14,6 +14,7 @@ import { centroid, strokeToRing } from '../core/geom/polygon.js';
 import { dist, type Vec2 } from '../core/geom/vec2.js';
 import type { SnapGuide, SnapKind } from '../core/geom/snap.js';
 import { HANDLE_PX, LINE_PX, PLAN } from './theme.js';
+import { drawCompass } from './compass.js';
 import { hatch } from './patterns.js';
 import { gridStep, toScreen, visibleRect, type View } from './view.js';
 
@@ -41,6 +42,8 @@ export type Overlay = {
 	image?: (assetId: string) => CanvasImageSource | null;
 	/** The baked ground, or null on a flat plot. */
 	field?: HeightField | null;
+	/** The north rose, on screen only: an exported sheet carries north in its title block. */
+	compass?: boolean;
 };
 
 export type Painter = {
@@ -90,6 +93,7 @@ export function createPainter(canvas: HTMLCanvasElement): Painter {
 
 		if (o.shadow) paintShadow(ctx, view, o.shadow);
 		if (o.checks && o.checks.length > 0) paintChecks(ctx, view, o.checks);
+		if (o.compass !== false) paintCompass(ctx, view, doc.meta.northOffset);
 		paintSelection(ctx, doc, view, o);
 		if (o.draft) paintDraft(ctx, view, o.draft);
 		if (o.marquee) paintMarquee(ctx, view, o.marquee);
@@ -99,6 +103,16 @@ export function createPainter(canvas: HTMLCanvasElement): Painter {
 	}
 
 	return { draw, resize };
+}
+
+/** Bottom right of the sheet, where a drafting rose goes, pointing where north actually is. */
+function paintCompass(ctx: CanvasRenderingContext2D, view: View, northOffset: number): void {
+	if (view.w < 240 || view.h < 200) return;
+	drawCompass(ctx, { x: view.w - 64, y: view.h - 64 }, 28, (-northOffset * Math.PI) / 180, {
+		ink: PLAN.ink,
+		faint: PLAN.inkFaint,
+		backing: 'rgba(236, 238, 226, 0.72)'
+	});
 }
 
 function paintGrid(ctx: CanvasRenderingContext2D, view: View): void {

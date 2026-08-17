@@ -15,7 +15,7 @@ export type HeightField = {
 
 const FINEST_CELL = 0.25;
 const MAX_CELLS = 250_000;
-const MARGIN = 10;
+const MARGIN = 16;
 
 type Spot = { at: Vec2; z: number };
 type Pad = { ring: Vec2[]; grade: Grade };

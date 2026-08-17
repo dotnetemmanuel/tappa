@@ -105,14 +105,14 @@ describe('buildField', () => {
 		expect(heightAt(f, 4, 4)).toBeCloseTo(-1, 6);
 	});
 
-	it('reaches ten metres past everything drawn', () => {
+	it('reaches well past everything drawn, so the ground does not end at the garden', () => {
 		const doc = withSpots([0, 0, 0], [20, 0, -2], [0, 20, 1]);
 		const b = docBounds(doc);
 		const f = must(buildField(doc));
-		expect(f.x0).toBeLessThanOrEqual(b.min.x - 10);
-		expect(f.y0).toBeLessThanOrEqual(b.min.y - 10);
-		expect(f.x0 + (f.nx - 1) * f.cell).toBeGreaterThanOrEqual(b.max.x + 10);
-		expect(f.y0 + (f.ny - 1) * f.cell).toBeGreaterThanOrEqual(b.max.y + 10);
+		expect(f.x0).toBeLessThanOrEqual(b.min.x - 15);
+		expect(f.y0).toBeLessThanOrEqual(b.min.y - 15);
+		expect(f.x0 + (f.nx - 1) * f.cell).toBeGreaterThanOrEqual(b.max.x + 15);
+		expect(f.y0 + (f.ny - 1) * f.cell).toBeGreaterThanOrEqual(b.max.y + 15);
 	});
 
 	it('coarsens the grid rather than growing without bound on a huge plot', () => {

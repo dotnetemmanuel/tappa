@@ -106,6 +106,11 @@ export class GradientSky {
 		this.uniforms.sunColour.value.set(colour);
 	}
 
+	/** The colour the world fades into, so haze and horizon are the same thing. */
+	get horizon(): Color {
+		return this.uniforms.horizon.value;
+	}
+
 	/** Follows the camera so the dome never clips at the far plane. */
 	follow(x: number, y: number, z: number): void {
 		this.mesh.position.set(x, y, z);

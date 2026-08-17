@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { PlanScene, type CameraMode } from '../render3d/scene.js';
+	import { drawCompass } from '../render2d/compass.js';
 	import type { AppState } from './app.svelte.js';
 
 	let { app }: { app: AppState } = $props();
@@ -8,6 +9,7 @@
 	let canvas: HTMLCanvasElement;
 	let wrap: HTMLDivElement;
 	let scene = $state<PlanScene | null>(null);
+	let rose = $state<HTMLCanvasElement | null>(null);
 	let mode = $state<CameraMode>('orbit');
 	let failed = $state('');
 
@@ -39,7 +41,20 @@
 		});
 		ro.observe(wrap);
 
+		// The rose follows the camera, so it redraws on its own rather than on a document change.
+		let raf = 0;
+		let drawnAt = Number.NaN;
+		const tick = (): void => {
+			raf = requestAnimationFrame(tick);
+			const up = s.northOnScreen;
+			if (Math.abs(up - drawnAt) < 0.004) return;
+			drawnAt = up;
+			drawRose(up);
+		};
+		tick();
+
 		return () => {
+			cancelAnimationFrame(raf);
 			ro.disconnect();
 			s.dispose();
 			scene = null;
@@ -59,6 +74,25 @@
 	$effect(() => {
 		scene?.setOptions({ years: app.years, month: app.month, when: app.when });
 	});
+
+	const ROSE_PX = 116;
+
+	function drawRose(up: number): void {
+		const ctx = rose?.getContext('2d');
+		if (!ctx || !rose) return;
+		const dpr = window.devicePixelRatio || 1;
+		if (rose.width !== ROSE_PX * dpr) {
+			rose.width = ROSE_PX * dpr;
+			rose.height = ROSE_PX * dpr;
+		}
+		const style = getComputedStyle(document.documentElement);
+		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+		ctx.clearRect(0, 0, ROSE_PX, ROSE_PX);
+		drawCompass(ctx, { x: ROSE_PX / 2, y: ROSE_PX / 2 }, 32, up, {
+			ink: style.getPropertyValue('--color-chalk').trim() || '#e9efe6',
+			faint: style.getPropertyValue('--color-sage').trim() || '#93a89b'
+		});
+	}
 
 	function setMode(next: CameraMode): void {
 		mode = next;
@@ -110,6 +144,12 @@
 				Anpassa
 			</button>
 		</div>
+
+		<canvas
+			bind:this={rose}
+			class="pointer-events-none absolute right-4 bottom-4 h-[116px] w-[116px] rounded-full border border-line bg-bark/85 backdrop-blur"
+			aria-hidden="true"
+		></canvas>
 
 		{#if mode === 'walk'}
 			<p

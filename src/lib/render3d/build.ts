@@ -26,7 +26,7 @@ import { wallParts } from '../core/building/wallgraph.js';
 import { docBounds } from '../core/doc/doc.js';
 import { lineStyle } from '../core/doc/materials.js';
 import type { Doc, Entity, EntityId, LineEntity, PlantEntity, PropEntity } from '../core/doc/types.js';
-import { strokeToRing } from '../core/geom/polygon.js';
+import { distToRing, pointInRing, strokeToRing } from '../core/geom/polygon.js';
 import type { Vec2 } from '../core/geom/vec2.js';
 import { speciesOr } from '../core/plants/catalog.js';
 import { seasonOf, sizeAt } from '../core/plants/growth.js';
@@ -156,17 +156,19 @@ export function buildGround(doc: Doc, field: HeightField | null): Group {
 		Number.isFinite(b.min.x) ? Math.hypot(b.max.x - b.min.x, b.max.y - b.min.y) * 6 : 240
 	);
 	// Past the field the ground carries on at its edge height, so the world does not end in a cliff.
+	// Dense enough that the join with the detailed ground does not read as a straight edge.
 	const terrain = new Mesh(
-		new PlaneGeometry(span, span, field ? 96 : 1, field ? 96 : 1).rotateX(-Math.PI / 2),
-		field ? terrainMaterial() : colourMaterial('#66774d', { rough: 1 })
+		new PlaneGeometry(span, span, 220, 220).rotateX(-Math.PI / 2),
+		terrainMaterial()
 	);
-	if (field) liftPlane(terrain.geometry, field, centre, 0.03);
+	if (field) liftPlane(terrain.geometry, field, centre, 0.03, doc.plot.boundary);
+	else flatColours(terrain.geometry, centre);
 	terrain.position.set(centre.x, -0.02, -centre.y);
 	terrain.receiveShadow = true;
 	terrain.name = 'terrain';
 
 	if (field) {
-		const surface = fieldToGeometry(field);
+		const surface = fieldToGeometry(field, doc.plot.boundary);
 		if (surface) {
 			const mesh = new Mesh(surface, terrainMaterial());
 			mesh.receiveShadow = true;
@@ -176,10 +178,9 @@ export function buildGround(doc: Doc, field: HeightField | null): Group {
 		}
 	}
 
-	if (doc.plot.boundary.length >= 3) {
-		const g = field
-			? drapedGeometry(drape(field, doc.plot.boundary, [], 0.008, field.cell))
-			: ringToGeometry(doc.plot.boundary, [], -0.005);
+	// With terrain the boundary is already in the ground's own colours, so this is only for a flat plot.
+	if (!field && doc.plot.boundary.length >= 3) {
+		const g = ringToGeometry(doc.plot.boundary, [], -0.005);
 		if (g) {
 			const plot = new Mesh(g, colourMaterial('#76885a', { rough: 1 }));
 			plot.receiveShadow = true;
@@ -189,7 +190,8 @@ export function buildGround(doc: Doc, field: HeightField | null): Group {
 	}
 	group.add(terrain);
 	if (field) {
-		const lines = contourMesh(field, doc.meta.contour);
+		const showGround = doc.layers.find((l) => l.id === 'ground')?.visible !== false;
+		const lines = showGround ? contourMesh(field, doc.meta.contour) : null;
 		if (lines) group.add(lines);
 		group.add(...retainingFaces(doc, field));
 	}
@@ -214,7 +216,7 @@ function contourMesh(f: HeightField, interval: number): Object3D | null {
 	if (pts.length === 0) return null;
 	const g = new BufferGeometry();
 	g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
-	const mesh = new LineSegments(g, new LineBasicMaterial({ color: new Color('#3c4a2c') }));
+	const mesh = new LineSegments(g, new LineBasicMaterial({ color: new Color('#4a5a3a'), transparent: true, opacity: 0.5 }));
 	mesh.name = 'contours';
 	return mesh;
 }
@@ -222,6 +224,38 @@ function contourMesh(f: HeightField, interval: number): Object3D | null {
 /** Low ground darker and cooler, high ground lighter and warmer. Value, not hue, so plants keep the colour. */
 const GROUND_LOW = new Color('#46583a');
 const GROUND_HIGH = new Color('#93a266');
+/** Rough land beyond the boundary: the same greens, drained and greyed, so the plot reads as yours. */
+const ROUGH_LOW = new Color('#4d5545');
+const ROUGH_HIGH = new Color('#89906f');
+/** How far outside the boundary the garden fades into the rough, in metres. */
+const EDGE_FADE = 1.5;
+
+/**
+ * Turf is never one flat colour, and a single green is what makes ground look like plastic.
+ * Two octaves of value noise, hashed from the position so it is the same every rebuild and
+ * never shimmers, at a few percent either side of the base.
+ */
+function hash2(x: number, y: number): number {
+	const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+	return s - Math.floor(s);
+}
+
+function valueNoise(x: number, y: number): number {
+	const xi = Math.floor(x);
+	const yi = Math.floor(y);
+	const tx = x - xi;
+	const ty = y - yi;
+	const sx = tx * tx * (3 - 2 * tx);
+	const sy = ty * ty * (3 - 2 * ty);
+	const a = hash2(xi, yi);
+	const b = hash2(xi + 1, yi);
+	const c = hash2(xi, yi + 1);
+	const d = hash2(xi + 1, yi + 1);
+	return (a * (1 - sx) + b * sx) * (1 - sy) + (c * (1 - sx) + d * sx) * sy;
+}
+
+const patchiness = (x: number, y: number): number =>
+	valueNoise(x / 3.5, y / 3.5) * 0.6 + valueNoise(x / 1.1, y / 1.1) * 0.4;
 
 function heightRange(f: HeightField): { lo: number; hi: number } {
 	let lo = Infinity;
@@ -235,13 +269,34 @@ function heightRange(f: HeightField): { lo: number; hi: number } {
 	return { lo, hi };
 }
 
-function groundColour(z: number, range: { lo: number; hi: number }, out: Color): Color {
-	const t = (z - range.lo) / (range.hi - range.lo);
-	return out.copy(GROUND_LOW).lerp(GROUND_HIGH, t < 0 ? 0 : t > 1 ? 1 : t);
+/** Height gives the value, the boundary gives the tone, and the noise keeps it from reading flat. */
+function groundColour(
+	x: number,
+	y: number,
+	z: number,
+	range: { lo: number; hi: number },
+	garden: number,
+	out: Color
+): Color {
+	const t = clamp01((z - range.lo) / (range.hi - range.lo));
+	const rough = ROUGH_LOW.clone().lerp(ROUGH_HIGH, t);
+	out.copy(GROUND_LOW).lerp(GROUND_HIGH, t).lerp(rough, 1 - garden);
+	const n = (patchiness(x, y) - 0.5) * 0.12;
+	out.offsetHSL(n * 0.02, n * 0.1, n);
+	return out;
+}
+
+const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/** 1 inside the boundary, 0 out in the rough, with a metre and a half of fade between. */
+function gardenAt(boundary: readonly Vec2[], p: Vec2): number {
+	if (boundary.length < 3) return 1;
+	const d = distToRing(p, boundary);
+	return pointInRing(p, boundary) ? 1 : clamp01(1 - d / EDGE_FADE);
 }
 
 /** The height grid as a mesh, one quad per cell. */
-function fieldToGeometry(f: HeightField): BufferGeometry | null {
+function fieldToGeometry(f: HeightField, boundary: readonly Vec2[]): BufferGeometry | null {
 	if (f.nx < 2 || f.ny < 2) return null;
 	const positions = new Float32Array(f.nx * f.ny * 3);
 	const uvs = new Float32Array(f.nx * f.ny * 2);
@@ -251,12 +306,14 @@ function fieldToGeometry(f: HeightField): BufferGeometry | null {
 	for (let j = 0; j < f.ny; j++) {
 		for (let i = 0; i < f.nx; i++) {
 			const k = j * f.nx + i;
-			positions[k * 3] = f.x0 + i * f.cell;
+			const px = f.x0 + i * f.cell;
+			const py = f.y0 + j * f.cell;
+			positions[k * 3] = px;
 			positions[k * 3 + 1] = f.h[k];
-			positions[k * 3 + 2] = -(f.y0 + j * f.cell);
-			uvs[k * 2] = f.x0 + i * f.cell;
-			uvs[k * 2 + 1] = f.y0 + j * f.cell;
-			groundColour(f.h[k], range, c);
+			positions[k * 3 + 2] = -py;
+			uvs[k * 2] = px;
+			uvs[k * 2 + 1] = py;
+			groundColour(px, py, f.h[k], range, gardenAt(boundary, { x: px, y: py }), c);
 			colours[k * 3] = c.r;
 			colours[k * 3 + 1] = c.g;
 			colours[k * 3 + 2] = c.b;
@@ -289,7 +346,13 @@ function fieldToGeometry(f: HeightField): BufferGeometry | null {
 }
 
 /** The surround plane follows the field where it overlaps and flattens out past its edge. */
-function liftPlane(g: BufferGeometry, f: HeightField, centre: Vec2, drop: number): void {
+function liftPlane(
+	g: BufferGeometry,
+	f: HeightField,
+	centre: Vec2,
+	drop: number,
+	boundary: readonly Vec2[]
+): void {
 	const pos = g.getAttribute('position');
 	const colours = new Float32Array(pos.count * 3);
 	const range = heightRange(f);
@@ -299,7 +362,7 @@ function liftPlane(g: BufferGeometry, f: HeightField, centre: Vec2, drop: number
 		const y = -pos.getZ(i) + centre.y;
 		const z = heightAt(f, x, y);
 		pos.setY(i, z - drop);
-		groundColour(z, range, c);
+		groundColour(x, y, z, range, gardenAt(boundary, { x, y }), c);
 		colours[i * 3] = c.r;
 		colours[i * 3 + 1] = c.g;
 		colours[i * 3 + 2] = c.b;
@@ -307,6 +370,23 @@ function liftPlane(g: BufferGeometry, f: HeightField, centre: Vec2, drop: number
 	pos.needsUpdate = true;
 	g.setAttribute('color', new BufferAttribute(colours, 3));
 	g.computeVertexNormals();
+}
+
+/** The same turf colours on a plot with no heights at all, so flat ground is not one flat green. */
+function flatColours(g: BufferGeometry, centre: Vec2): void {
+	const pos = g.getAttribute('position');
+	const colours = new Float32Array(pos.count * 3);
+	const range = { lo: -0.5, hi: 0.5 };
+	const c = new Color();
+	for (let i = 0; i < pos.count; i++) {
+		const x = pos.getX(i) + centre.x;
+		const y = -pos.getZ(i) + centre.y;
+		groundColour(x, y, 0, range, 1, c);
+		colours[i * 3] = c.r;
+		colours[i * 3 + 1] = c.g;
+		colours[i * 3 + 2] = c.b;
+	}
+	g.setAttribute('color', new BufferAttribute(colours, 3));
 }
 
 function drapedGeometry(mesh: DrapedMesh): BufferGeometry | null {

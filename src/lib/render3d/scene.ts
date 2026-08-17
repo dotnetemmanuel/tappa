@@ -2,7 +2,7 @@ import {
 	ACESFilmicToneMapping,
 	Group,
 	Object3D,
-	PCFShadowMap,
+	PCFSoftShadowMap,
 	PerspectiveCamera,
 	Raycaster,
 	SRGBColorSpace,
@@ -62,6 +62,16 @@ export class PlanScene {
 
 	onPick: ((id: EntityId | null, additive: boolean) => void) | null = null;
 
+	/**
+	 * Where north sits on screen, in radians clockwise from up, for the compass. Plan north is
+	 * -z in the scene, so this is the camera's own heading read back off its matrix.
+	 */
+	get northOnScreen(): number {
+		const dir = new Vector3();
+		this.camera.getWorldDirection(dir);
+		return -Math.atan2(dir.x, -dir.z);
+	}
+
 	constructor(canvas: HTMLCanvasElement, doc: Doc, options: SceneOptions) {
 		this.doc = doc;
 		this.options = options;
@@ -69,7 +79,7 @@ export class PlanScene {
 		this.renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 		this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 		this.renderer.shadowMap.enabled = true;
-		this.renderer.shadowMap.type = PCFShadowMap;
+		this.renderer.shadowMap.type = PCFSoftShadowMap;
 		this.renderer.outputColorSpace = SRGBColorSpace;
 		this.renderer.toneMapping = ACESFilmicToneMapping;
 		SunRig.configure(this.renderer);

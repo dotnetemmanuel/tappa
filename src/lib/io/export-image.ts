@@ -97,7 +97,8 @@ const EXPORT_OVERLAY = (
 	showVertices: false,
 	years,
 	month,
-	field
+	field,
+	compass: false
 });
 
 /** Render the plan to an offscreen canvas at export resolution and return a PNG blob. */

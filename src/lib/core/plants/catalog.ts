@@ -315,7 +315,8 @@ export const SPECIES: readonly Species[] = [
 		mature: { h: 4, w: 4 },
 		growthRate: 10,
 		evergreen: false,
-		foliage: { spring: '#b4632f', summer: '#8a4a35', autumn: '#c8321f', winter: null },
+		// The red leaved forms are what people plant and picture, so it reads red, not brown.
+		foliage: { spring: '#c1452b', summer: '#9d2a2c', autumn: '#d8341c', winter: null },
 		bark: '#6b5348',
 		needs: { sun: 'part', moisture: 'normal', zone: 2 },
 		spacing: 3.5

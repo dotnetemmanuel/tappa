@@ -2,6 +2,7 @@ import {
 	AmbientLight,
 	Color,
 	DirectionalLight,
+	Fog,
 	HemisphereLight,
 	Scene,
 	type WebGLRenderer
@@ -15,7 +16,7 @@ const SHADOW_MAP = 2048;
 export const SKY_SCALE = SKY_RADIUS;
 /** suncalc gives physical intensity; these lift it to something the tone mapper likes. */
 const SUN_GAIN = 2.8;
-const AMBIENT_GAIN = 1.6;
+const AMBIENT_GAIN = 1.1;
 
 /**
  * Sun, sky and ambient fill, all driven from one date. The shadow camera is
@@ -35,15 +36,21 @@ export class SunRig {
 		this.light.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
 		this.light.shadow.bias = -0.0006;
 		this.light.shadow.normalBias = 0.03;
+		// A garden has soft shadow edges; a hard stencil edge is what reads as a game engine.
+		this.light.shadow.radius = 2.5;
 		this.light.target.position.set(0, 0, 0);
 		scene.add(this.light);
 		scene.add(this.light.target);
 
-		this.hemi = new HemisphereLight(0xbcd6ea, 0x5d6b4c, 0.55);
+		// Sky above and a bounce off the grass below, which is what keeps a shaded wall from going dead.
+		this.hemi = new HemisphereLight(0xbcd6ea, 0x6b7a52, 0.9);
 		scene.add(this.hemi);
 
-		this.ambient = new AmbientLight(0xffffff, 0.15);
+		this.ambient = new AmbientLight(0xffffff, 0.06);
 		scene.add(this.ambient);
+
+		// The world fades into the horizon rather than ending at the edge of the ground plane.
+		scene.fog = new Fog(0xcfe0ea, 60, 260);
 
 		this.sky = new GradientSky(scene);
 	}
@@ -83,9 +90,16 @@ export class SunRig {
 		this.light.intensity = p.up ? light.intensity * SUN_GAIN : 0;
 		this.light.castShadow = p.up && p.altitude > 0.03;
 		this.ambient.intensity = light.ambient * AMBIENT_GAIN;
-		this.hemi.intensity = 0.35 + light.ambient * AMBIENT_GAIN;
+		this.hemi.intensity = 0.45 + light.ambient * AMBIENT_GAIN;
+		this.hemi.color.copy(this.sky.horizon);
 
 		this.sky.update(p.altitude, p.toSun, light.colour);
+		const fog = this.scene.fog;
+		if (fog instanceof Fog) {
+			fog.color.copy(this.sky.horizon);
+			fog.near = this.radius * 1.6;
+			fog.far = this.radius * 7 + 80;
+		}
 	}
 
 	/** The gradient sky is not tone mapped, so this only has to suit the lit geometry. */
@@ -100,6 +114,7 @@ export class SunRig {
 
 	dispose(): void {
 		this.sky.dispose();
+		this.scene.fog = null;
 		this.scene.remove(this.light, this.light.target, this.hemi, this.ambient);
 		this.light.dispose();
 		this.hemi.dispose();
