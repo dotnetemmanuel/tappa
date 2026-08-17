@@ -117,11 +117,19 @@ missing under each one below is the honest remainder.
 7. Images. Underlay and calibration, textures, cutout billboards, asset store.
 8. Analysis and export. Shadow study, spacing and sun checks, planting list.
 9. Polish. Touch, shortcuts sheet, autosave, project browser, empty states.
+10. Terrain. Height points, levelled areas, the house in the slope, the ground in
+    every view, sun on real ground, and the side view from each direction.
 
 ## Known remainder
 
 - No project browser yet: the app reopens the last project, and `.tappa` files
   cover everything else.
+- A house has one storey definition: the suterrang storey is the wall skirting
+  down to the ground, not a separately drawn lower floor with its own outline.
+- Terrain shading in the sun study is a coarse march along the sun, so a small
+  mound reads as no obstacle at all.
+- The side view draws silhouettes rather than a true section, and carries no
+  dimensions of its own.
 - Props are not occluders in the sun study, and a pitched roof is approximated
   there by one flat box at 55 percent of the eave to ridge rise.
 - Openings are placed by a slider in the inspector, not by clicking the wall.

@@ -65,3 +65,36 @@ The code was changed to match the documented contract rather than the other way 
 ## polygon-clipping is imported as a default
 The package ships only a default export, so `import * as clip` then `clip.union(...)` throws at runtime while typechecking cleanly.
 Named type imports still come from the namespace.
+
+## The ground is a baked grid, not a formula and not a triangle network
+`buildField` turns the height points and the levelled areas into one grid of heights, and the plan, the 3D view, the sun study and the side view all read it.
+Evaluating a formula per query would cost minutes in the sun study, and a triangle network needs constrained triangulation for every terrace edge.
+
+## Height comes from a plane through the points, bent to pass through each one
+A least squares plane plus an inverse distance weighted correction of each point's own residual, which is exactly zero when the points are already planar.
+So three points give a dead even slope rather than three dimples, and the surface still passes through every number that was typed.
+
+## A levelled area is a field on an area, not its own entity
+`AreaEntity.grade` carries the level, the edge and the bank run, so a paved terrace is drawn once rather than as a surface plus a separate platform.
+`elev` keeps its old meaning as a small lift above the ground; `grade` moves the ground itself.
+
+## Floor level lives on the wall and is written to the whole run
+There is no building entity, and inventing one would ripple through roofs, selection and the wall graph, so `WallEntity.floor` is per wall and the inspector writes it to every wall in the connected loop.
+Divergent values stay legal and each wall then uses its own, which keeps every renderer total.
+
+## A wall is one prism from the lowest ground it covers
+The base is flat at the lowest ground under the wall minus 0.2 m rather than following the ground along its length, because the extra material is underground and never seen.
+Following the ground would need a profiled bottom edge in every face, for nothing visible.
+
+## Opening sills are measured from the finished floor
+A sill used to be measured from the wall base, and the base now moves with the ground, which would have shifted every window on a sloping plot.
+Measuring from the floor leaves every existing document untouched, and a negative sill is how a window lands in the suterrang storey.
+
+## Terrain shades itself coarsely in the sun study
+Each sample marches along the sun at one metre steps out to sixty, which costs about a quarter second on a forty by thirty metre plot and nothing at all on flat ground.
+A bank or a rise to the south is what matters here; fine detail is not worth the time.
+
+## The side view draws silhouettes, not a true section
+Every entity is flattened into its outline at its own distance and sorted back to front, and the buried part of a building is drawn dashed through the earth rather than cut away.
+A real section would need solid clipping against a plane, which is a lot of machinery for a view whose job is to show how the house sits in the slope.
+
