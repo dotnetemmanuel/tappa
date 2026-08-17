@@ -1,5 +1,6 @@
 import {
 	BoxGeometry,
+	BufferAttribute,
 	BufferGeometry,
 	Color,
 	ConeGeometry,
@@ -7,6 +8,8 @@ import {
 	DoubleSide,
 	Group,
 	InstancedMesh,
+	LineBasicMaterial,
+	LineSegments,
 	Matrix4,
 	Mesh,
 	MeshStandardMaterial,
@@ -31,7 +34,10 @@ import { plantForm } from '../core/plants/archetypes.js';
 import type { Mass, PlantForm } from '../core/plants/types.js';
 import { formForProp } from '../core/props/builders.js';
 import type { Part } from '../core/props/types.js';
-import { colourMaterial, glassMaterial, surfaceMaterial } from './materials.js';
+import { contourLines } from '../core/terrain/contour.js';
+import { heightAt, type HeightField } from '../core/terrain/field.js';
+import { drape, groundUnder, profileAlong, type DrapedMesh } from '../core/terrain/query.js';
+import { colourMaterial, glassMaterial, surfaceMaterial, terrainMaterial } from './materials.js';
 import { prismToGeometry, ribbonToGeometry, ringToGeometry, solidToGeometry } from './geometry.js';
 
 /** Surfaces are lifted a few millimetres apart so co-planar areas do not z-fight. */
@@ -39,6 +45,8 @@ const LAYER_LIFT = 0.004;
 
 export type BuildContext = {
 	doc: Doc;
+	/** The baked ground, or null on a flat plot. */
+	field: HeightField | null;
 	/** Global years since planting, from the age slider. */
 	years: number;
 	/** Month 1 to 12, drives season, bloom and dieback. */
@@ -135,7 +143,7 @@ function tagEntity(o: Object3D, id: EntityId): void {
 // ---------------------------------------------------------------- surfaces
 
 /** Terrain runs well past the plot, so the world does not visibly end at the boundary. */
-export function buildGround(doc: Doc): Group {
+export function buildGround(doc: Doc, field: HeightField | null): Group {
 	const group = new Group();
 	group.name = 'ground';
 	const b = docBounds(doc);
@@ -147,16 +155,31 @@ export function buildGround(doc: Doc): Group {
 		240,
 		Number.isFinite(b.min.x) ? Math.hypot(b.max.x - b.min.x, b.max.y - b.min.y) * 6 : 240
 	);
+	// Past the field the ground carries on at its edge height, so the world does not end in a cliff.
 	const terrain = new Mesh(
-		new PlaneGeometry(span, span).rotateX(-Math.PI / 2),
-		colourMaterial('#6f7f52', { rough: 1 })
+		new PlaneGeometry(span, span, field ? 96 : 1, field ? 96 : 1).rotateX(-Math.PI / 2),
+		field ? terrainMaterial() : colourMaterial('#6f7f52', { rough: 1 })
 	);
+	if (field) liftPlane(terrain.geometry, field, centre, 0.03);
 	terrain.position.set(centre.x, -0.02, -centre.y);
 	terrain.receiveShadow = true;
 	terrain.name = 'terrain';
 
+	if (field) {
+		const surface = fieldToGeometry(field);
+		if (surface) {
+			const mesh = new Mesh(surface, terrainMaterial());
+			mesh.receiveShadow = true;
+			mesh.castShadow = true;
+			mesh.name = 'terrainField';
+			group.add(mesh);
+		}
+	}
+
 	if (doc.plot.boundary.length >= 3) {
-		const g = ringToGeometry(doc.plot.boundary, [], -0.005);
+		const g = field
+			? drapedGeometry(drape(field, doc.plot.boundary, [], 0.008, field.cell))
+			: ringToGeometry(doc.plot.boundary, [], -0.005);
 		if (g) {
 			const plot = new Mesh(g, colourMaterial('#7d8f5c', { rough: 1 }));
 			plot.receiveShadow = true;
@@ -165,16 +188,171 @@ export function buildGround(doc: Doc): Group {
 		}
 	}
 	group.add(terrain);
+	if (field) {
+		const lines = contourMesh(field, doc.meta.contour);
+		if (lines) group.add(lines);
+		group.add(...retainingFaces(doc, field));
+	}
 	return group;
+}
+
+/**
+ * The plan's contour lines, laid on the 3D ground. An even slope in one flat green
+ * reads as flat, and these are what make it read as a slope at a glance.
+ */
+function contourMesh(f: HeightField, interval: number): Object3D | null {
+	const lines = contourLines(f, interval > 0 ? interval : 0.25);
+	if (lines.length === 0) return null;
+	const pts: number[] = [];
+	for (const l of lines) {
+		for (let i = 1; i < l.pts.length; i++) {
+			const a = l.pts[i - 1];
+			const b = l.pts[i];
+			pts.push(a.x, l.z + 0.02, -a.y, b.x, l.z + 0.02, -b.y);
+		}
+	}
+	if (pts.length === 0) return null;
+	const g = new BufferGeometry();
+	g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
+	const mesh = new LineSegments(g, new LineBasicMaterial({ color: new Color('#43512f') }));
+	mesh.name = 'contours';
+	return mesh;
+}
+
+/** Low ground darker and cooler, high ground lighter and warmer. Value, not hue, so plants keep the colour. */
+const GROUND_LOW = new Color('#4e5c3a');
+const GROUND_HIGH = new Color('#8b9a63');
+
+function heightRange(f: HeightField): { lo: number; hi: number } {
+	let lo = Infinity;
+	let hi = -Infinity;
+	for (const h of f.h) {
+		if (h < lo) lo = h;
+		if (h > hi) hi = h;
+	}
+	// A dead flat field would divide by zero and a one centimetre bump would look like a mountain.
+	if (!(hi - lo > 0.2)) return { lo: lo - 0.5, hi: lo + 0.5 };
+	return { lo, hi };
+}
+
+function groundColour(z: number, range: { lo: number; hi: number }, out: Color): Color {
+	const t = (z - range.lo) / (range.hi - range.lo);
+	return out.copy(GROUND_LOW).lerp(GROUND_HIGH, t < 0 ? 0 : t > 1 ? 1 : t);
+}
+
+/** The height grid as a mesh, one quad per cell. */
+function fieldToGeometry(f: HeightField): BufferGeometry | null {
+	if (f.nx < 2 || f.ny < 2) return null;
+	const positions = new Float32Array(f.nx * f.ny * 3);
+	const uvs = new Float32Array(f.nx * f.ny * 2);
+	const colours = new Float32Array(f.nx * f.ny * 3);
+	const range = heightRange(f);
+	const c = new Color();
+	for (let j = 0; j < f.ny; j++) {
+		for (let i = 0; i < f.nx; i++) {
+			const k = j * f.nx + i;
+			positions[k * 3] = f.x0 + i * f.cell;
+			positions[k * 3 + 1] = f.h[k];
+			positions[k * 3 + 2] = -(f.y0 + j * f.cell);
+			uvs[k * 2] = f.x0 + i * f.cell;
+			uvs[k * 2 + 1] = f.y0 + j * f.cell;
+			groundColour(f.h[k], range, c);
+			colours[k * 3] = c.r;
+			colours[k * 3 + 1] = c.g;
+			colours[k * 3 + 2] = c.b;
+		}
+	}
+	const index = new Uint32Array((f.nx - 1) * (f.ny - 1) * 6);
+	let t = 0;
+	for (let j = 0; j < f.ny - 1; j++) {
+		for (let i = 0; i < f.nx - 1; i++) {
+			const a = j * f.nx + i;
+			const b = a + 1;
+			const c = a + f.nx;
+			const d = c + 1;
+			index[t++] = a;
+			index[t++] = c;
+			index[t++] = b;
+			index[t++] = b;
+			index[t++] = c;
+			index[t++] = d;
+		}
+	}
+	const g = new BufferGeometry();
+	g.setAttribute('position', new BufferAttribute(positions, 3));
+	g.setAttribute('uv', new BufferAttribute(uvs, 2));
+	g.setAttribute('color', new BufferAttribute(colours, 3));
+	g.setIndex(new BufferAttribute(index, 1));
+	g.computeVertexNormals();
+	g.computeBoundingSphere();
+	return g;
+}
+
+/** The surround plane follows the field where it overlaps and flattens out past its edge. */
+function liftPlane(g: BufferGeometry, f: HeightField, centre: Vec2, drop: number): void {
+	const pos = g.getAttribute('position');
+	const colours = new Float32Array(pos.count * 3);
+	const range = heightRange(f);
+	const c = new Color();
+	for (let i = 0; i < pos.count; i++) {
+		const x = pos.getX(i) + centre.x;
+		const y = -pos.getZ(i) + centre.y;
+		const z = heightAt(f, x, y);
+		pos.setY(i, z - drop);
+		groundColour(z, range, c);
+		colours[i * 3] = c.r;
+		colours[i * 3 + 1] = c.g;
+		colours[i * 3 + 2] = c.b;
+	}
+	pos.needsUpdate = true;
+	g.setAttribute('color', new BufferAttribute(colours, 3));
+	g.computeVertexNormals();
+}
+
+function drapedGeometry(mesh: DrapedMesh): BufferGeometry | null {
+	if (mesh.index.length === 0) return null;
+	const g = new BufferGeometry();
+	g.setAttribute('position', new BufferAttribute(mesh.positions, 3));
+	g.setAttribute('uv', new BufferAttribute(mesh.uvs, 2));
+	g.setIndex(new BufferAttribute(mesh.index, 1));
+	g.computeVertexNormals();
+	g.computeBoundingSphere();
+	return g;
+}
+
+/** The vertical face a terrace with a hard edge cuts into the slope. */
+function retainingFaces(doc: Doc, f: HeightField): Object3D[] {
+	const out: Object3D[] = [];
+	for (const e of doc.entities) {
+		if (e.k !== 'area' || !e.grade || e.grade.edge !== 'wall' || e.ring.length < 3) continue;
+		const around = groundUnder(f, e.ring);
+		const lo = Math.min(around.min, e.grade.level) - 0.15;
+		const hi = Math.max(around.max, e.grade.level);
+		if (hi - lo < 0.02) continue;
+		const g = ribbonToGeometry(e.ring, hi - lo, lo, true);
+		if (!g) continue;
+		const mesh = new Mesh(g, surfaceMaterial({ id: e.grade.mat ?? 'concrete' }, null));
+		mesh.castShadow = true;
+		mesh.receiveShadow = true;
+		tagEntity(mesh, e.id);
+		out.push(mesh);
+	}
+	return out;
 }
 
 function buildSurface(e: Entity, ctx: BuildContext, order: number): Object3D | null {
 	if (e.k !== 'area' && e.k !== 'path') return null;
 	const ring = e.k === 'area' ? e.ring : e.spine.length >= 2 ? strokeToRing(e.spine, e.width) : null;
 	if (!ring || ring.length < 3) return null;
-	const elev = (e.k === 'area' ? (e.elev ?? 0) : 0) + order * LAYER_LIFT;
+	const lift = (e.k === 'area' ? (e.elev ?? 0) : 0) + order * LAYER_LIFT;
 	const holes = e.k === 'area' ? (e.holes ?? []) : [];
-	const g = ringToGeometry(ring, holes, elev);
+	const grade = e.k === 'area' ? e.grade : undefined;
+	// A levelled area is flat by definition; everything else follows the ground it is laid on.
+	const g = grade
+		? ringToGeometry(ring, holes, grade.level + lift)
+		: ctx.field
+			? drapedGeometry(drape(ctx.field, ring, holes, lift, ctx.field.cell))
+			: ringToGeometry(ring, holes, lift);
 	if (!g) return null;
 	const mesh = new Mesh(g, surfaceMaterial(e.mat, e.mat.asset ? ctx.texture(e.mat.asset) : null));
 	mesh.receiveShadow = true;
@@ -184,7 +362,7 @@ function buildSurface(e: Entity, ctx: BuildContext, order: number): Object3D | n
 
 // -------------------------------------------------------------- structures
 
-function buildFence(e: LineEntity): Object3D | null {
+function buildFence(e: LineEntity, field: HeightField | null): Object3D | null {
 	if (e.spine.length < 2) return null;
 	const def = lineStyle(e.style.id);
 	const colour = e.style.colour ?? def.colour;
@@ -192,36 +370,80 @@ function buildFence(e: LineEntity): Object3D | null {
 
 	if (def.render === 'hedge' || def.render === 'stone') {
 		const ring = strokeToRing(e.spine, Math.max(0.2, e.thickness));
-		const g = prismToGeometry(ring, 0, e.height);
-		if (g) {
-			const mesh = new Mesh(g, colourMaterial(colour, { rough: 1, flat: def.render === 'stone' }));
+		const mat = colourMaterial(colour, { rough: 1, flat: def.render === 'stone' });
+		const sides = field ? profiledRibbon(field, ring, e.height, 0, true) : prismToGeometry(ring, 0, e.height);
+		if (sides) {
+			const mesh = new Mesh(sides, mat);
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
+			group.add(mesh);
+		}
+		const cap = field ? drapedGeometry(drape(field, ring, [], e.height, field.cell)) : null;
+		if (cap) {
+			const mesh = new Mesh(cap, mat);
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
 			group.add(mesh);
 		}
 	} else if (def.render === 'solid' || def.render === 'panel') {
-		const g = ribbonToGeometry(e.spine, e.height * (def.render === 'panel' ? 0.92 : 1), 0.02);
+		const g = profiledRibbon(field, e.spine, e.height * (def.render === 'panel' ? 0.92 : 1), 0.02, false);
 		if (g) {
 			const mesh = new Mesh(g, panelMaterial(colour));
 			mesh.castShadow = true;
 			mesh.receiveShadow = true;
 			group.add(mesh);
 		}
-		addPosts(group, e.spine, e.height, colour, 2.2);
+		addPosts(group, e.spine, e.height, colour, 2.2, field);
 	} else if (def.render === 'mesh' || def.render === 'trellis') {
-		const g = ribbonToGeometry(e.spine, e.height, 0.05);
+		const g = profiledRibbon(field, e.spine, e.height, 0.05, false);
 		if (g) {
 			const mat = panelMaterial(colour);
 			const see = transparentOf(mat, def.render === 'mesh' ? 0.35 : 0.5);
 			group.add(new Mesh(g, see));
 		}
-		addPosts(group, e.spine, e.height, colour, 2.5);
+		addPosts(group, e.spine, e.height, colour, 2.5, field);
 	} else {
-		addPickets(group, e.spine, e.height, colour);
-		addPosts(group, e.spine, e.height, colour, 2);
+		addPickets(group, e.spine, e.height, colour, field);
+		addPosts(group, e.spine, e.height, colour, 2, field);
 	}
 	tagEntity(group, e.id);
 	return group.children.length > 0 ? group : null;
+}
+
+/** A fence band that rides the ground: posts stay upright, the run rakes with the slope. */
+function profiledRibbon(
+	field: HeightField | null,
+	pts: readonly Vec2[],
+	height: number,
+	base: number,
+	closed: boolean
+): BufferGeometry | null {
+	if (!field) return ribbonToGeometry(pts, height, base, closed);
+	const line = closed ? [...pts, pts[0]] : pts;
+	if (line.length < 2) return null;
+	const samples = profileAlong(field, line, field.cell);
+	if (samples.length < 2) return null;
+	const positions: number[] = [];
+	const uvs: number[] = [];
+	const indices: number[] = [];
+	let run = 0;
+	for (let i = 0; i < samples.length; i++) {
+		const s = samples[i];
+		if (i > 0) run += Math.hypot(s.at.x - samples[i - 1].at.x, s.at.y - samples[i - 1].at.y);
+		positions.push(s.at.x, s.z + base, -s.at.y, s.at.x, s.z + base + height, -s.at.y);
+		uvs.push(run, 0, run, height);
+	}
+	for (let i = 0; i < samples.length - 1; i++) {
+		const a = i * 2;
+		indices.push(a, a + 1, a + 3, a, a + 3, a + 2);
+	}
+	const g = new BufferGeometry();
+	g.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
+	g.setAttribute('uv', new BufferAttribute(new Float32Array(uvs), 2));
+	g.setIndex(indices);
+	g.computeVertexNormals();
+	g.computeBoundingSphere();
+	return g;
 }
 
 const panelCache = new Map<string, MeshStandardMaterial>();
@@ -253,12 +475,19 @@ function walkSpine(spine: readonly Vec2[], step: number, fn: (p: Vec2, dir: Vec2
 	fn(last, { x: (last.x - prev.x) / len, y: (last.y - prev.y) / len });
 }
 
-function addPosts(group: Group, spine: readonly Vec2[], height: number, colour: string, step: number): void {
+function addPosts(
+	group: Group,
+	spine: readonly Vec2[],
+	height: number,
+	colour: string,
+	step: number,
+	field: HeightField | null
+): void {
 	const parts: BufferGeometry[] = [];
 	walkSpine(spine, step, (p) => {
 		const g = unitBox.clone();
 		g.scale(0.09, height + 0.08, 0.09);
-		g.translate(p.x, (height + 0.08) / 2, -p.y);
+		g.translate(p.x, heightAt(field, p.x, p.y) + (height + 0.08) / 2, -p.y);
 		parts.push(g);
 	});
 	if (parts.length === 0) return;
@@ -270,13 +499,19 @@ function addPosts(group: Group, spine: readonly Vec2[], height: number, colour: 
 	if (parts.length > 1) for (const p of parts) p.dispose();
 }
 
-function addPickets(group: Group, spine: readonly Vec2[], height: number, colour: string): void {
+function addPickets(
+	group: Group,
+	spine: readonly Vec2[],
+	height: number,
+	colour: string,
+	field: HeightField | null
+): void {
 	const parts: BufferGeometry[] = [];
 	walkSpine(spine, 0.12, (p, dir) => {
 		const g = unitBox.clone();
 		g.scale(0.035, height, 0.02);
 		g.rotateY(Math.atan2(dir.x, dir.y) - Math.PI / 2);
-		g.translate(p.x, height / 2, -p.y);
+		g.translate(p.x, heightAt(field, p.x, p.y) + height / 2, -p.y);
 		parts.push(g);
 	});
 	if (parts.length === 0) return;
@@ -357,7 +592,7 @@ function bucketPlants(ctx: BuildContext): Map<string, PlantBucket> {
 		const sy = sp.mature.h > 0 ? size.h / sp.mature.h : 1;
 		const m = new Matrix4();
 		q.setFromAxisAngle(axis, e.rot ?? 0);
-		m.compose(new Vector3(e.at.x, 0, -e.at.y), q, new Vector3(sx, sy, sx));
+		m.compose(new Vector3(e.at.x, heightAt(ctx.field, e.at.x, e.at.y), -e.at.y), q, new Vector3(sx, sy, sx));
 		bucket.matrices.push(m);
 		bucket.ids.push(e.id);
 	}
@@ -412,7 +647,7 @@ function buildPlants(ctx: BuildContext): Object3D {
 
 // ------------------------------------------------------------------- props
 
-function buildProp(e: PropEntity): Object3D | null {
+function buildProp(e: PropEntity, field: HeightField | null): Object3D | null {
 	const form = formForProp(e);
 	if (form.parts.length === 0) return null;
 	const meshes = mergeByColour(
@@ -421,7 +656,15 @@ function buildProp(e: PropEntity): Object3D | null {
 	if (meshes.length === 0) return null;
 	const group = new Group();
 	for (const m of meshes) group.add(m);
-	group.position.set(e.at.x, 0, -e.at.y);
+	// Level, and standing on the highest ground it covers, so no corner sinks in.
+	const reach = 1.2 * (e.scale ?? 1);
+	const under = groundUnder(field, [
+		{ x: e.at.x - reach, y: e.at.y - reach },
+		{ x: e.at.x + reach, y: e.at.y - reach },
+		{ x: e.at.x + reach, y: e.at.y + reach },
+		{ x: e.at.x - reach, y: e.at.y + reach }
+	]);
+	group.position.set(e.at.x, under.max, -e.at.y);
 	group.rotation.y = e.rot ?? 0;
 	const s = e.scale ?? 1;
 	group.scale.setScalar(s);
@@ -460,10 +703,10 @@ export function buildScene(ctx: BuildContext): SceneParts {
 	for (const e of ctx.doc.entities) {
 		if (!visible(ctx.doc, e)) continue;
 		if (e.k === 'line') {
-			const f = buildFence(e);
+			const f = buildFence(e, ctx.field);
 			if (f) structures.add(f);
 		} else if (e.k === 'prop') {
-			const p = buildProp(e);
+			const p = buildProp(e, ctx.field);
 			if (p) structures.add(p);
 		}
 	}
@@ -472,7 +715,7 @@ export function buildScene(ctx: BuildContext): SceneParts {
 	planting.name = 'planting';
 	planting.add(buildPlants(ctx));
 
-	return { ground: buildGround(ctx.doc), surfaces, structures, planting };
+	return { ground: buildGround(ctx.doc, ctx.field), surfaces, structures, planting };
 }
 
 function visible(doc: Doc, e: Entity): boolean {

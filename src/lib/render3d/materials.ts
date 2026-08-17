@@ -68,6 +68,20 @@ export function colourMaterial(hex: string, opts: { rough?: number; flat?: boole
 	return mat;
 }
 
+let terrainMat: MeshStandardMaterial | null = null;
+
+/** The ground carries its own colour per vertex, which is what makes a gentle slope read. */
+export function terrainMaterial(): MeshStandardMaterial {
+	if (terrainMat) return terrainMat;
+	terrainMat = new MeshStandardMaterial({
+		color: new Color('#ffffff'),
+		vertexColors: true,
+		roughness: 1,
+		metalness: 0
+	});
+	return terrainMat;
+}
+
 export function glassMaterial(): MeshStandardMaterial {
 	return colourMaterial('#8fb3c4', { rough: 0.15 });
 }

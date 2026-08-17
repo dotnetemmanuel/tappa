@@ -17,7 +17,8 @@
 			s = new PlanScene(canvas, app.doc, {
 				years: app.years,
 				month: app.month,
-				when: app.when
+				when: app.when,
+				field: app.field
 			});
 		} catch (err) {
 			failed = err instanceof Error ? err.message : 'Kunde inte starta 3D-vyn';
@@ -50,6 +51,8 @@
 	// The document is the single source of truth, so any edit rebuilds the scene.
 	$effect(() => {
 		void app.rev;
+		// The field has to land before the rebuild, or the scene builds the new document on old ground.
+		scene?.setOptions({ field: app.field });
 		scene?.setDoc(app.doc);
 	});
 

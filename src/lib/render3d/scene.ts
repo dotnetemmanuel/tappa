@@ -17,6 +17,7 @@ import { docBounds } from '../core/doc/doc.js';
 import type { Doc, EntityId } from '../core/doc/types.js';
 import { rectCentre, type Rect } from '../core/geom/vec2.js';
 import { buildScene, disposeObject, type BuildContext, type SceneParts } from './build.js';
+import type { HeightField } from '../core/terrain/field.js';
 import { SKY_SCALE, SunRig } from './sun.js';
 
 export type CameraMode = 'orbit' | 'walk';
@@ -25,6 +26,8 @@ export type SceneOptions = {
 	years: number;
 	month: number;
 	when: Date;
+	/** The baked ground, rebuilt by the app and handed in so both views share one surface. */
+	field?: HeightField | null;
 	texture?: (assetId: string) => Texture | null;
 };
 
@@ -143,7 +146,8 @@ export class PlanScene {
 	setOptions(o: Partial<SceneOptions>): void {
 		const rebuildNeeded =
 			(o.years !== undefined && o.years !== this.options.years) ||
-			(o.month !== undefined && o.month !== this.options.month);
+			(o.month !== undefined && o.month !== this.options.month) ||
+			(o.field !== undefined && o.field !== this.options.field);
 		this.options = { ...this.options, ...o };
 		if (rebuildNeeded) this.rebuild();
 		else this.sun.update(this.doc, this.options.when);
@@ -160,6 +164,7 @@ export class PlanScene {
 		this.root.clear();
 		const ctx: BuildContext = {
 			doc: this.doc,
+			field: this.options.field ?? null,
 			years: this.options.years,
 			month: this.options.month,
 			texture: this.options.texture ?? (() => null)
