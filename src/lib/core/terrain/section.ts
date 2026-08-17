@@ -94,6 +94,31 @@ export function handleAt(
 	return { side, u, z: Number.isFinite(z) ? z : 0, at, spot };
 }
 
+/** A height point that stands on this section, as somewhere you can grab it in the view. */
+export type SectionVertex = { id: EntityId; u: number; z: number; at: Vec2; offset: number };
+
+/**
+ * The height points near enough to the section line to belong to it. A point off at the far
+ * edge of the plot is not on this section and drawing it here would put a handle on ground
+ * that is not under it.
+ */
+export function sectionVertices(doc: Doc, facing: Facing): SectionVertex[] {
+	const b = docBounds(doc);
+	if (!Number.isFinite(b.min.x) || b.max.x < b.min.x) return [];
+	const acrossPlan = facing === 's' || facing === 'n';
+	const depth = acrossPlan ? b.max.y - b.min.y : b.max.x - b.min.x;
+	const reach = Math.max(2, depth * 0.25);
+	const out: SectionVertex[] = [];
+	for (const e of doc.entities) {
+		if (e.k !== 'spot') continue;
+		const on = sectionPoint(doc, facing, uOf(facing, e.at));
+		const offset = Math.hypot(e.at.x - on.x, e.at.y - on.y);
+		if (offset > reach) continue;
+		out.push({ id: e.id, u: uOf(facing, e.at), z: e.z, at: e.at, offset });
+	}
+	return out.sort((p, q) => p.u - q.u);
+}
+
 /** Where a plan point lands across the view. */
 export const uOf = (facing: Facing, p: Vec2): number => AXES[facing].u(p);
 

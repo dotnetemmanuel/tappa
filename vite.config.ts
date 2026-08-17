@@ -17,7 +17,13 @@ export default defineConfig({
 		})
 	],
 	test: {
-		include: ['src/lib/core/**/*.test.ts', 'src/lib/io/**/*.test.ts'],
+		// render2d is drawing and needs no tests, but the pure parts of it, the hit testing
+		// above all, do.
+		include: [
+			'src/lib/core/**/*.test.ts',
+			'src/lib/io/**/*.test.ts',
+			'src/lib/render2d/**/*.test.ts'
+		],
 		environment: 'node'
 	}
 });

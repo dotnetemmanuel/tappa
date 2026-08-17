@@ -1,7 +1,14 @@
 import { buildRoof } from '../core/building/roof.js';
 import { wallParts, wallQuad } from '../core/building/wallgraph.js';
 import { lineStyle } from '../core/doc/materials.js';
-import type { Doc, Entity, LineEntity, PlantEntity, PropEntity } from '../core/doc/types.js';
+import type {
+	Doc,
+	Entity,
+	EntityId,
+	LineEntity,
+	PlantEntity,
+	PropEntity
+} from '../core/doc/types.js';
 import { layerOf } from '../core/doc/doc.js';
 import type { Vec2 } from '../core/geom/vec2.js';
 import { speciesOr } from '../core/plants/catalog.js';
@@ -9,24 +16,31 @@ import { sizeAt } from '../core/plants/growth.js';
 import { formForProp } from '../core/props/builders.js';
 import { heightAt, type HeightField } from '../core/terrain/field.js';
 import { profileAlong } from '../core/terrain/query.js';
+import type { GroundTarget } from '../core/terrain/edit.js';
 import {
 	AXES,
 	elevationBounds,
 	groundProfile,
+	handleAt,
 	sectionProfile,
+	sectionVertices,
 	slopeHandles,
 	type Axis,
 	type Facing,
 	type SlopeHandle
 } from '../core/terrain/section.js';
 import { PLAN, LINE_PX } from './theme.js';
-import { toScreen, visibleRect, type View } from './view.js';
+import { toScreen, toWorld, visibleRect, type View } from './view.js';
 
 export type ElevationOptions = {
 	years: number;
 	month: number;
 	/** A point on the ground line being dragged or hovered, drawn like the end handles. */
 	grab?: SlopeHandle | null;
+	/** Where a click would drop a new vertex, drawn as a ghost while the pointer is on the line. */
+	ghost?: { u: number; z: number } | null;
+	/** The vertex under the pointer, drawn a little larger. */
+	hot?: EntityId | null;
 };
 
 type Shape = { far: number; paint: (ctx: CanvasRenderingContext2D) => void };
@@ -107,8 +121,10 @@ export function paintElevation(
 
 	paintSection(ctx, doc, field, facing, view, uMin, uMax);
 	paintRuler(ctx, view, bounds);
+	if (o.ghost) paintGhost(ctx, view, o.ghost);
+	for (const v of sectionVertices(doc, facing)) paintVertex(ctx, view, v, v.id === o.hot);
 	for (const h of slopeHandles(doc, field, facing)) paintHandle(ctx, view, h);
-	if (o.grab) paintHandle(ctx, view, o.grab);
+	if (o.grab && o.grab.side !== 'along') paintHandle(ctx, view, o.grab);
 	ctx.restore();
 }
 
@@ -395,6 +411,71 @@ function paintSection(
 	ctx.restore();
 }
 
+/** Up and down chevrons, so a handle says what dragging it does before you drag it. */
+function upDown(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+	const a = r * 0.55;
+	ctx.beginPath();
+	ctx.moveTo(x - a, y - r * 0.18);
+	ctx.lineTo(x, y - r * 0.62);
+	ctx.lineTo(x + a, y - r * 0.18);
+	ctx.moveTo(x - a, y + r * 0.18);
+	ctx.lineTo(x, y + r * 0.62);
+	ctx.lineTo(x + a, y + r * 0.18);
+	ctx.strokeStyle = PLAN.ink;
+	ctx.lineWidth = LINE_PX.normal;
+	ctx.lineCap = 'round';
+	ctx.lineJoin = 'round';
+	ctx.stroke();
+}
+
+/** One height point on this section: drag it and only the ground around it moves. */
+function paintVertex(
+	ctx: CanvasRenderingContext2D,
+	view: View,
+	v: { u: number; z: number },
+	hot: boolean
+): void {
+	const p = toScreen(view, { x: v.u, y: v.z });
+	const r = hot ? VERTEX_R + 2 : VERTEX_R;
+	ctx.save();
+	ctx.beginPath();
+	ctx.roundRect(p.x - r, p.y - r, r * 2, r * 2, 3);
+	ctx.fillStyle = PLAN.paper;
+	ctx.fill();
+	ctx.strokeStyle = PLAN.select;
+	ctx.lineWidth = LINE_PX.normal;
+	ctx.stroke();
+	upDown(ctx, p.x, p.y, r);
+	ctx.restore();
+}
+
+/** Where a click would drop a new vertex. */
+function paintGhost(
+	ctx: CanvasRenderingContext2D,
+	view: View,
+	at: { u: number; z: number }
+): void {
+	const p = toScreen(view, { x: at.u, y: at.z });
+	ctx.save();
+	ctx.globalAlpha = 0.75;
+	ctx.beginPath();
+	ctx.roundRect(p.x - VERTEX_R, p.y - VERTEX_R, VERTEX_R * 2, VERTEX_R * 2, 3);
+	ctx.setLineDash([3, 3]);
+	ctx.strokeStyle = PLAN.select;
+	ctx.lineWidth = LINE_PX.thin;
+	ctx.stroke();
+	ctx.setLineDash([]);
+	ctx.beginPath();
+	ctx.moveTo(p.x - 4, p.y);
+	ctx.lineTo(p.x + 4, p.y);
+	ctx.moveTo(p.x, p.y - 4);
+	ctx.lineTo(p.x, p.y + 4);
+	ctx.strokeStyle = PLAN.select;
+	ctx.lineWidth = LINE_PX.normal;
+	ctx.stroke();
+	ctx.restore();
+}
+
 /** A grabbable marker with its height, at each end of the ground line. */
 function paintHandle(ctx: CanvasRenderingContext2D, view: View, h: SlopeHandle): void {
 	const p = toScreen(view, { x: h.u, y: h.z });
@@ -407,6 +488,7 @@ function paintHandle(ctx: CanvasRenderingContext2D, view: View, h: SlopeHandle):
 	ctx.strokeStyle = PLAN.ink;
 	ctx.lineWidth = LINE_PX.thin;
 	ctx.stroke();
+	upDown(ctx, p.x, p.y, HANDLE_R);
 
 	const text = signed(h.z);
 	ctx.font = '12px "IBM Plex Mono", ui-monospace, monospace';
@@ -421,6 +503,49 @@ function paintHandle(ctx: CanvasRenderingContext2D, view: View, h: SlopeHandle):
 	ctx.textBaseline = 'middle';
 	ctx.fillText(text, x + 4, p.y);
 	ctx.restore();
+}
+
+/** What a press at a screen position means: tilt an end, take a vertex, add one, or pan. */
+export type Aim = {
+	target: GroundTarget;
+	z: number;
+	u: number;
+	side: SlopeHandle['side'];
+	/** The height point under the pointer, when there is one. */
+	vertex?: EntityId;
+};
+
+const GRAB_PX = 10;
+
+export function aimAt(
+	doc: Doc,
+	field: HeightField | null,
+	facing: Facing,
+	view: View,
+	x: number,
+	y: number
+): Aim | null {
+	for (const h of slopeHandles(doc, field, facing)) {
+		const box = handleHitBox(view, h);
+		const p = toScreen(view, { x: h.u, y: h.z });
+		const onDot = Math.hypot(p.x - x, p.y - y) <= GRAB_PX + 4;
+		const onNumber = x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h;
+		if (onDot || onNumber) {
+			const side = h.side === 'right' ? 'right' : 'left';
+			return { target: { kind: 'tilt', side }, z: h.z, u: h.u, side };
+		}
+	}
+	for (const v of sectionVertices(doc, facing)) {
+		const p = toScreen(view, { x: v.u, y: v.z });
+		if (Math.abs(p.x - x) <= VERTEX_R + 3 && Math.abs(p.y - y) <= VERTEX_R + 3) {
+			return { target: { kind: 'point', u: v.u }, z: v.z, u: v.u, side: 'along', vertex: v.id };
+		}
+	}
+	const world = toWorld(view, { x, y });
+	const here = handleAt(doc, field, facing, world.x);
+	const line = toScreen(view, { x: here.u, y: here.z });
+	if (Math.abs(line.y - y) > GRAB_PX) return null;
+	return { target: { kind: 'point', u: here.u }, z: here.z, u: here.u, side: 'along' };
 }
 
 /** Screen box of a handle's number, so the view knows what a click on it means. */
@@ -438,7 +563,8 @@ export function handleHitBox(
 	};
 }
 
-export const HANDLE_R = 6;
+export const HANDLE_R = 9;
+export const VERTEX_R = 7;
 
 /** Heights down the left edge, so you can read how deep the ground falls. */
 function paintRuler(

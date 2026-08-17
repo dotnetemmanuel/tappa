@@ -1,28 +1,25 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import { AddEntities, ReplaceEntities } from '../core/cmd/edits.js';
-	import { makeSpot } from '../core/doc/factory.js';
 	import { findEntity } from '../core/doc/doc.js';
-	import { handleHitBox, paintElevation } from '../render2d/elevation.js';
+	import type { Entity, EntityId } from '../core/doc/types.js';
+	import {
+		ghostAt,
+		groundEdit,
+		type GroundEdit,
+		type GroundMove,
+		type GroundTarget
+	} from '../core/terrain/edit.js';
 	import {
 		elevationBounds,
 		handleAt,
-		slopeHandles,
-		tiltFactor,
 		FACING_SV,
 		type Facing,
 		type SlopeHandle
 	} from '../core/terrain/section.js';
+	import { aimAt, paintElevation } from '../render2d/elevation.js';
 	import { PLAN } from '../render2d/theme.js';
-	import {
-		createView,
-		fitTo,
-		panBy,
-		toScreen,
-		toWorld,
-		zoomAt,
-		type View
-	} from '../render2d/view.js';
+	import { createView, fitTo, panBy, toScreen, zoomAt, type View } from '../render2d/view.js';
 	import type { AppState } from './app.svelte.js';
 
 	let { app }: { app: AppState } = $props();
@@ -33,18 +30,18 @@
 	let dpr = 1;
 	let frame = 0;
 	let pan: { x: number; y: number } | null = null;
-	type Drag = {
-		handle: SlopeHandle;
-		from: number;
-		/** Set for a local drag: the one height point that moves. */
-		spot?: string;
-		startZ?: number;
-		/** Set for an end drag: every height point rides the ramp instead. */
-		tilt?: Tilt | null;
-	};
-	let dragging: Drag | null = null;
-	let editing = $state<{ handle: SlopeHandle; x: number; y: number; value: string } | null>(null);
+	let dragging: { edit: GroundEdit; from: number; u: number; side: SlopeHandle['side'] } | null =
+		null;
+	let editing = $state<{
+		target: GroundTarget;
+		z: number;
+		x: number;
+		y: number;
+		value: string;
+	} | null>(null);
 	let grab = $state<SlopeHandle | null>(null);
+	let ghost = $state<{ u: number; z: number } | null>(null);
+	let hot = $state<EntityId | null>(null);
 	let onLine = $state(false);
 
 	const FACINGS: Facing[] = ['s', 'e', 'n', 'w'];
@@ -59,7 +56,9 @@
 		paintElevation(ctx, app.doc, app.field, app.facing, view, {
 			years: app.years,
 			month: app.month,
-			grab
+			grab,
+			ghost,
+			hot
 		});
 		ctx.restore();
 	}
@@ -111,121 +110,64 @@
 		void app.years;
 		void view;
 		void grab;
+		void ghost;
+		void hot;
 		schedule();
 	});
 
-	const handles = $derived.by((): SlopeHandle[] => {
-		void app.rev;
-		void app.facing;
-		return slopeHandles(app.doc, app.field, app.facing);
-	});
-
-	const GRAB_PX = 12;
-
-	/** An end handle if the pointer is on its number, otherwise the ground line under it. */
-	function grabAt(x: number, y: number): SlopeHandle | null {
-		for (const h of handles) {
-			const box = handleHitBox(view, h);
-			if (x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) return h;
+	/** Put whatever the edit needs into the document, as its own undo step. */
+	function start(target: GroundTarget): GroundEdit {
+		const edit = groundEdit(app.doc, app.field, app.facing, target);
+		if (edit.create.length > 0) {
+			app.history.run(new AddEntities(edit.create, 'Marknivå'));
 		}
-		const world = toWorld(view, { x, y });
-		const here = handleAt(app.doc, app.field, app.facing, world.x);
-		const line = toScreen(view, { x: here.u, y: here.z });
-		return Math.abs(line.y - y) <= GRAB_PX ? here : null;
+		return edit;
 	}
 
-	/**
-	 * The ground at one end is a height point there. If there is not one yet, the first drag
-	 * or edit puts one in, so the number you grab is always something the document holds.
-	 */
-	function spotFor(h: SlopeHandle): string {
-		if (h.spot && findEntity(app.doc, h.spot)) return h.spot;
-		const spot = makeSpot(h.at, Math.round(h.z * 100) / 100);
-		app.history.run(new AddEntities([spot], 'Marknivå'));
-		return spot.id;
+	/** Both halves of a move in one step: the ground, and any house a tilt carries with it. */
+	function moved(move: GroundMove): Entity[] {
+		const out: Entity[] = [];
+		for (const { id, z } of move.spots) {
+			const e = findEntity(app.doc, id);
+			if (e && e.k === 'spot') out.push({ ...e, z });
+		}
+		for (const { id, floor } of move.floors) {
+			const e = findEntity(app.doc, id);
+			if (e && e.k === 'wall' && (e.floor ?? 0) !== floor) out.push({ ...e, floor });
+		}
+		return out;
 	}
 
-	function setSpot(id: string, z: number, coalesce: boolean): void {
-		const e = findEntity(app.doc, id);
-		if (!e || e.k !== 'spot') return;
-		const next = { ...e, z: Math.round(z * 100) / 100 };
-		if (coalesce)
-			app.history.coalesced(() => app.history.run(new ReplaceEntities([next], 'Marknivå')));
-		else app.history.run(new ReplaceEntities([next], 'Marknivå'));
-	}
-
-	type Tilt = { pivot: number; span: number; spots: { id: string; t: number; z: number }[] };
-
-	/**
-	 * The two ends tilt the whole plot: the far end stays put and every height point moves
-	 * along the ramp between them. Anywhere else on the line moves only its own point.
-	 */
-	function tiltFor(h: SlopeHandle): Tilt | null {
-		const far = handles.find((x) => x.side !== h.side && x.side !== 'along');
-		if (!far) return null;
-		const span = h.u - far.u;
-		if (Math.abs(span) < 1e-6) return null;
-		// Both ends become real points, so the pivot is something the document holds.
-		spotFor(h);
-		spotFor(far);
-		const spots = app.doc.entities
-			.filter((e) => e.k === 'spot')
-			.map((e) => ({
-				id: e.id,
-				t: tiltFactor(app.facing, h.u, far.u, e.at),
-				z: e.z
-			}));
-		return { pivot: far.u, span, spots };
-	}
-
-	function applyTilt(tilt: Tilt, dz: number, coalesce: boolean): void {
-		const next = tilt.spots
-			.map(({ id, t, z }) => {
-				const e = findEntity(app.doc, id);
-				return e && e.k === 'spot' ? { ...e, z: Math.round((z + dz * t) * 100) / 100 } : null;
-			})
-			.filter((e) => e !== null);
+	function move(edit: GroundEdit, dz: number, coalesce: boolean, label: string): void {
+		const next = moved(edit.apply(dz));
 		if (next.length === 0) return;
-		if (coalesce)
-			app.history.coalesced(() => app.history.run(new ReplaceEntities(next, 'Luta tomten')));
-		else app.history.run(new ReplaceEntities(next, 'Luta tomten'));
+		const run = () => app.history.run(new ReplaceEntities(next, label));
+		if (coalesce) app.history.coalesced(run);
+		else run();
 	}
 
 	function pointerDown(e: PointerEvent): void {
 		const r = canvas.getBoundingClientRect();
-		const x = e.clientX - r.left;
-		const y = e.clientY - r.top;
-		const hit = grabAt(x, y);
-		if (hit) {
-			canvas.setPointerCapture(e.pointerId);
-			if (hit.side === 'along') {
-				const spot = spotFor(hit);
-				const held = findEntity(app.doc, spot);
-				dragging = {
-					handle: hit,
-					spot,
-					from: e.clientY,
-					startZ: held && held.k === 'spot' ? held.z : hit.z
-				};
-			} else {
-				dragging = { handle: hit, from: e.clientY, tilt: tiltFor(hit) };
-			}
-			grab = hit;
+		const aim = aimAt(app.doc, app.field, app.facing, view, e.clientX - r.left, e.clientY - r.top);
+		canvas.setPointerCapture(e.pointerId);
+		if (!aim) {
+			pan = { x: e.clientX, y: e.clientY };
 			return;
 		}
-		canvas.setPointerCapture(e.pointerId);
-		pan = { x: e.clientX, y: e.clientY };
+		dragging = { edit: start(aim.target), from: e.clientY, u: aim.u, side: aim.side };
+		grab = { side: aim.side, u: aim.u, z: aim.z, at: { x: 0, y: 0 }, spot: null };
+		ghost = null;
 	}
 
 	function pointerMove(e: PointerEvent): void {
 		const r = canvas.getBoundingClientRect();
 		if (dragging) {
 			const dz = (dragging.from - e.clientY) / view.scale;
-			if (Math.abs(dz) > 0.005) {
-				if (dragging.tilt) applyTilt(dragging.tilt, dz, true);
-				else if (dragging.spot) setSpot(dragging.spot, (dragging.startZ ?? 0) + dz, true);
+			if (Math.abs(dz) > 0.004) {
+				move(dragging.edit, dz, true, dragging.side === 'along' ? 'Marknivå' : 'Luta tomten');
 			}
-			grab = handleAt(app.doc, app.field, app.facing, dragging.handle.u, dragging.handle.side);
+			const now = handleAt(app.doc, app.field, app.facing, dragging.u, dragging.side);
+			grab = now;
 			return;
 		}
 		if (pan) {
@@ -233,17 +175,33 @@
 			pan = { x: e.clientX, y: e.clientY };
 			return;
 		}
-		const hover = grabAt(e.clientX - r.left, e.clientY - r.top);
-		onLine = hover !== null;
-		grab = hover && hover.side === 'along' ? hover : null;
-		schedule();
+		const aim = aimAt(app.doc, app.field, app.facing, view, e.clientX - r.left, e.clientY - r.top);
+		onLine = aim !== null;
+		hot = aim?.vertex ?? null;
+		// Only the bare line offers a new vertex; over one that exists you would be moving it.
+		ghost =
+			aim && aim.side === 'along' && !aim.vertex
+				? ghostAt(app.doc, app.field, app.facing, aim.u)
+				: null;
 	}
 
 	function pointerUp(e: PointerEvent): void {
 		const r = canvas.getBoundingClientRect();
 		if (dragging) {
 			const moved = Math.abs(dragging.from - e.clientY) > 3;
-			if (!moved) startEditing(dragging.handle, r);
+			if (!moved) {
+				const p = toScreen(view, { x: dragging.u, y: dragging.edit.startZ });
+				editing = {
+					target:
+						dragging.side === 'along'
+							? { kind: 'point', u: dragging.u }
+							: { kind: 'tilt', side: dragging.side === 'right' ? 'right' : 'left' },
+					z: dragging.edit.startZ,
+					x: Math.min(Math.max(8, p.x - 46), r.width - 104),
+					y: Math.max(8, p.y - 34),
+					value: dragging.edit.startZ.toFixed(2).replace('.', ',')
+				};
+			}
 			dragging = null;
 		}
 		pan = null;
@@ -251,28 +209,21 @@
 		canvas.releasePointerCapture?.(e.pointerId);
 	}
 
-	function startEditing(h: SlopeHandle, r: DOMRect): void {
-		const p = toScreen(view, { x: h.u, y: h.z });
-		editing = {
-			handle: h,
-			x: Math.min(Math.max(8, p.x - 40), r.width - 96),
-			y: Math.max(8, p.y - 14),
-			value: h.z.toFixed(2).replace('.', ',')
-		};
-	}
-
 	function commitEditing(): void {
 		const state = editing;
 		editing = null;
 		if (!state) return;
 		const z = Number(state.value.replace(',', '.').trim());
-		if (!Number.isFinite(z)) return;
-		if (state.handle.side === 'along') {
-			setSpot(spotFor(state.handle), z, false);
-			return;
-		}
-		const tilt = tiltFor(state.handle);
-		if (tilt) applyTilt(tilt, z - state.handle.z, false);
+		if (!Number.isFinite(z) || Math.abs(z - state.z) < 1e-9) return;
+		const edit = groundEdit(app.doc, app.field, app.facing, state.target);
+		const label = state.target.kind === 'tilt' ? 'Luta tomten' : 'Marknivå';
+		const created = edit.create;
+		const next = edit.apply(z - state.z);
+		app.history.transact(label, () => {
+			if (created.length > 0) app.history.run(new AddEntities(created, label));
+			const next2 = moved(next);
+			if (next2.length > 0) app.history.run(new ReplaceEntities(next2, label));
+		});
 	}
 
 	function wheel(e: WheelEvent): void {
@@ -292,6 +243,11 @@
 		onpointermove={pointerMove}
 		onpointerup={pointerUp}
 		onpointercancel={pointerUp}
+		onpointerleave={() => {
+			ghost = null;
+			hot = null;
+			onLine = false;
+		}}
 		onwheel={wheel}
 	></canvas>
 
@@ -338,7 +294,7 @@
 	</div>
 
 	<p class="absolute right-2 bottom-2 text-[11px] text-sage">
-		Dra var som helst i marklinjen för att höja eller sänka marken där, klicka på en siffra för att
-		skriva in den.
+		Dra i ändarna för att luta hela tomten. Klicka på marklinjen för att sätta en punkt där, och dra
+		den upp eller ner för att ändra marken just där.
 	</p>
 </div>

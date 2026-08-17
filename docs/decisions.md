@@ -106,3 +106,11 @@ A bank or a rise to the south is what matters here; fine detail is not worth the
 Every entity is flattened into its outline at its own distance and sorted back to front, and the buried part of a building is drawn dashed through the earth rather than cut away.
 A real section would need solid clipping against a plane, which is a lot of machinery for a view whose job is to show how the house sits in the slope.
 
+## Editing the ground is core code, not view code
+`core/terrain/edit.ts` works out what a press means and where every height point ends up, and `aimAt` in the painter turns a screen position into that intent.
+Both are pure and tested; the Svelte view only turns pointer events into calls and wraps the result in an undo step, because nothing inside a component can be tested here.
+
+## A tilt carries the house, digging one spot does not
+Dragging an end turns the whole plot, so a house rides along and keeps sitting the way it sat, one floor level for the whole loop.
+Dragging any other point leaves the house at its level, so digging out or banking up against it grows the base storey, which is the whole point of a suterrang plan.
+
