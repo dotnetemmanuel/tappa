@@ -2,64 +2,28 @@ import { buildRoof } from '../core/building/roof.js';
 import { wallParts, wallQuad } from '../core/building/wallgraph.js';
 import { lineStyle } from '../core/doc/materials.js';
 import type { Doc, Entity, LineEntity, PlantEntity, PropEntity } from '../core/doc/types.js';
-import { docBounds, layerOf } from '../core/doc/doc.js';
+import { layerOf } from '../core/doc/doc.js';
 import type { Vec2 } from '../core/geom/vec2.js';
 import { speciesOr } from '../core/plants/catalog.js';
 import { sizeAt } from '../core/plants/growth.js';
 import { formForProp } from '../core/props/builders.js';
 import { heightAt, type HeightField } from '../core/terrain/field.js';
-import { groundUnder, profileAlong } from '../core/terrain/query.js';
+import { profileAlong } from '../core/terrain/query.js';
+import {
+	AXES,
+	elevationBounds,
+	groundProfile,
+	slopeHandles,
+	type Axis,
+	type Facing,
+	type SlopeHandle
+} from '../core/terrain/section.js';
 import { PLAN, LINE_PX } from './theme.js';
 import { toScreen, visibleRect, type View } from './view.js';
-
-/** The compass point you are standing on, looking across the plot. */
-export type Facing = 'n' | 'e' | 's' | 'w';
-
-export const FACING_SV: Record<Facing, string> = {
-	n: 'Från norr',
-	e: 'Från öster',
-	s: 'Från söder',
-	w: 'Från väster'
-};
-
-type Axis = { u: (p: Vec2) => number; depth: (p: Vec2) => number };
-
-/** Right hand across the view, depth away from you, so a face reads the way you would stand to it. */
-const AXES: Record<Facing, Axis> = {
-	s: { u: (p) => p.x, depth: (p) => p.y },
-	n: { u: (p) => -p.x, depth: (p) => -p.y },
-	e: { u: (p) => p.y, depth: (p) => -p.x },
-	w: { u: (p) => -p.y, depth: (p) => p.x }
-};
 
 export type ElevationOptions = { years: number; month: number };
 
 type Shape = { far: number; paint: (ctx: CanvasRenderingContext2D) => void };
-
-/** World extent of the drawing in view coordinates: u across, height up. */
-export function elevationBounds(doc: Doc, field: HeightField | null, facing: Facing) {
-	const b = docBounds(doc);
-	if (!Number.isFinite(b.min.x) || b.max.x < b.min.x) {
-		return { min: { x: -10, y: -2 }, max: { x: 10, y: 8 } };
-	}
-	const ax = AXES[facing];
-	const corners = [
-		{ x: b.min.x, y: b.min.y },
-		{ x: b.max.x, y: b.min.y },
-		{ x: b.max.x, y: b.max.y },
-		{ x: b.min.x, y: b.max.y }
-	];
-	const us = corners.map(ax.u);
-	const ground = field ? groundUnder(field, corners) : { min: 0, max: 0 };
-	let top = ground.max + 3;
-	for (const e of doc.entities) {
-		if (e.k === 'wall') top = Math.max(top, (e.floor ?? 0) + e.height + 2);
-	}
-	return {
-		min: { x: Math.min(...us), y: ground.min - 2 },
-		max: { x: Math.max(...us), y: top }
-	};
-}
 
 /**
  * The plot seen from one side: the ground profile with the earth under it, everything
@@ -136,59 +100,8 @@ export function paintElevation(
 	ctx.stroke();
 
 	paintRuler(ctx, view, bounds);
+	for (const h of slopeHandles(doc, field, facing)) paintHandle(ctx, view, h);
 	ctx.restore();
-}
-
-type Sample = { u: number; z: number };
-
-/** The highest ground at each position across the view, which is the silhouette of the land. */
-function groundProfile(
-	doc: Doc,
-	field: HeightField | null,
-	facing: Facing,
-	uMin: number,
-	uMax: number
-): Sample[] {
-	const out: Sample[] = [];
-	const columns = 240;
-	const du = (uMax - uMin) / columns;
-	if (!field) {
-		return [
-			{ u: uMin, z: 0 },
-			{ u: uMax, z: 0 }
-		];
-	}
-	const b = docBounds(doc);
-	const depthMin = facing === 's' || facing === 'n' ? b.min.y : b.min.x;
-	const depthMax = facing === 's' || facing === 'n' ? b.max.y : b.max.x;
-	const steps = 60;
-	const dd = (depthMax - depthMin) / steps;
-	for (let i = 0; i <= columns; i++) {
-		const u = uMin + i * du;
-		let z = -Infinity;
-		for (let k = 0; k <= steps; k++) {
-			const d = depthMin + k * dd;
-			const p = fromView(facing, u, d);
-			const h = heightAt(field, p.x, p.y);
-			if (h > z) z = h;
-		}
-		out.push({ u, z: Number.isFinite(z) ? z : 0 });
-	}
-	return out;
-}
-
-/** Back from a position across the view plus a plan depth to a plan point. */
-function fromView(facing: Facing, u: number, d: number): Vec2 {
-	switch (facing) {
-		case 's':
-			return { x: u, y: d };
-		case 'n':
-			return { x: -u, y: d };
-		case 'e':
-			return { x: d, y: u };
-		case 'w':
-			return { x: d, y: -u };
-	}
 }
 
 function collect(doc: Doc, field: HeightField | null, ax: Axis, o: ElevationOptions): Shape[] {
@@ -443,6 +356,51 @@ function box(
 	ctx.lineWidth = LINE_PX.thin;
 	ctx.stroke();
 }
+
+/** A grabbable marker with its height, at each end of the ground line. */
+function paintHandle(ctx: CanvasRenderingContext2D, view: View, h: SlopeHandle): void {
+	const p = toScreen(view, { x: h.u, y: h.z });
+	const left = h.side === 'left';
+	ctx.save();
+	ctx.beginPath();
+	ctx.arc(p.x, p.y, HANDLE_R, 0, Math.PI * 2);
+	ctx.fillStyle = PLAN.select;
+	ctx.fill();
+	ctx.strokeStyle = PLAN.ink;
+	ctx.lineWidth = LINE_PX.thin;
+	ctx.stroke();
+
+	const text = signed(h.z);
+	ctx.font = '12px "IBM Plex Mono", ui-monospace, monospace';
+	const w = ctx.measureText(text).width;
+	const x = left ? p.x + HANDLE_R + 4 : p.x - HANDLE_R - 4 - w - 8;
+	ctx.fillStyle = PLAN.paper;
+	ctx.fillRect(x, p.y - 9, w + 8, 18);
+	ctx.strokeStyle = PLAN.select;
+	ctx.strokeRect(x, p.y - 9, w + 8, 18);
+	ctx.fillStyle = PLAN.ink;
+	ctx.textAlign = 'left';
+	ctx.textBaseline = 'middle';
+	ctx.fillText(text, x + 4, p.y);
+	ctx.restore();
+}
+
+/** Screen box of a handle's number, so the view knows what a click on it means. */
+export function handleHitBox(
+	view: View,
+	h: SlopeHandle
+): { x: number; y: number; w: number; h: number } {
+	const p = toScreen(view, { x: h.u, y: h.z });
+	const width = 78;
+	return {
+		x: h.side === 'left' ? p.x - HANDLE_R : p.x - HANDLE_R - width,
+		y: p.y - 11,
+		w: width + HANDLE_R * 2,
+		h: 22
+	};
+}
+
+export const HANDLE_R = 6;
 
 /** Heights down the left edge, so you can read how deep the ground falls. */
 function paintRuler(

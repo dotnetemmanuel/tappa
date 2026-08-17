@@ -3,7 +3,8 @@ import type { Doc } from '../core/doc/types.js';
 import type { Rect } from '../core/geom/vec2.js';
 import { buildField, type HeightField } from '../core/terrain/field.js';
 import { createPainter, type Overlay } from '../render2d/painter.js';
-import { elevationBounds, paintElevation, FACING_SV, type Facing } from '../render2d/elevation.js';
+import { paintElevation } from '../render2d/elevation.js';
+import { elevationBounds, FACING_SV, type Facing } from '../core/terrain/section.js';
 import { PLAN } from '../render2d/theme.js';
 import type { View } from '../render2d/view.js';
 import {

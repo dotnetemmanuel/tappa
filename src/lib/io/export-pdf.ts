@@ -2,7 +2,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB }
 import type { Doc } from '../core/doc/types.js';
 import { formatArea, formatLength } from '../core/doc/dimension.js';
 import { exportElevationPng, exportPlanPng, exportViewPng } from './export-image.js';
-import type { Facing } from '../render2d/elevation.js';
+import type { Facing } from '../core/terrain/section.js';
 import { GROUP_SV, takeoff, type Takeoff } from './takeoff.js';
 
 export type PdfOptions = {

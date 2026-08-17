@@ -5,7 +5,7 @@ import { defaultSnapSettings, type SnapSettings } from '../core/geom/snap.js';
 import type { ShadowGrid } from '../core/sun/shadow.js';
 import { buildField, type HeightField } from '../core/terrain/field.js';
 import type { PropId, SpeciesId } from '../core/doc/types.js';
-import type { Facing } from '../render2d/elevation.js';
+import type { Facing } from '../core/terrain/section.js';
 import { createView, fitTo, type View } from '../render2d/view.js';
 
 export type ToolId =
