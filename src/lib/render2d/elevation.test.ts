@@ -18,7 +18,7 @@ function scene(): { doc: Doc; field: HeightField; view: View } {
 	];
 	doc.entities.push(makeSpot({ x: 0, y: 10 }, 0));
 	doc.entities.push(makeSpot({ x: 20, y: 10 }, -2));
-	doc.entities.push(makeSpot({ x: 10, y: 5 }, -1));
+	doc.entities.push(makeSpot({ x: 10, y: 10 }, -1));
 	const field = buildField(doc);
 	if (!field) throw new Error('expected a field');
 	return { doc, field, view: { centre: { x: 10, y: -1 }, scale: 20, w: 900, h: 500 } };

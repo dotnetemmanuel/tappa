@@ -98,16 +98,14 @@ export function handleAt(
 export type SectionVertex = { id: EntityId; u: number; z: number; at: Vec2; offset: number };
 
 /**
- * The height points near enough to the section line to belong to it. A point off at the far
- * edge of the plot is not on this section and drawing it here would put a handle on ground
- * that is not under it.
+ * The height points that stand on this section. The tolerance is tight on purpose: a point
+ * off to the side sits at its own height, not at the height of the line here, so drawing it
+ * on the line would put a handle where the ground is not.
  */
 export function sectionVertices(doc: Doc, facing: Facing): SectionVertex[] {
 	const b = docBounds(doc);
 	if (!Number.isFinite(b.min.x) || b.max.x < b.min.x) return [];
-	const acrossPlan = facing === 's' || facing === 'n';
-	const depth = acrossPlan ? b.max.y - b.min.y : b.max.x - b.min.x;
-	const reach = Math.max(2, depth * 0.25);
+	const reach = 0.75;
 	const out: SectionVertex[] = [];
 	for (const e of doc.entities) {
 		if (e.k !== 'spot') continue;

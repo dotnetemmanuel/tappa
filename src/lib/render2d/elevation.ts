@@ -119,7 +119,7 @@ export function paintElevation(
 	ctx.lineWidth = LINE_PX.bold;
 	ctx.stroke();
 
-	paintSection(ctx, doc, field, facing, view, uMin, uMax);
+	paintSection(ctx, doc, field, facing, view, profile);
 	paintRuler(ctx, view, bounds);
 	if (o.ghost) paintGhost(ctx, view, o.ghost);
 	for (const v of sectionVertices(doc, facing)) paintVertex(ctx, view, v, v.id === o.hot);
@@ -381,10 +381,12 @@ function box(
 	ctx.stroke();
 }
 
+const SECTION_GAP = 0.05;
+
 /**
- * The ground through the middle of the plot, drawn thin over the silhouette. On an even slope
- * it lies on the earth line and disappears into it; where a bank at the far edge stands higher,
- * it shows what the handles actually move.
+ * The ground through the middle of the plot, which is the line the handles ride. It is only
+ * drawn where it parts from the earth silhouette behind it, so on an even slope you see one
+ * line, and where a bank at the far edge stands higher you see what you are actually moving.
  */
 function paintSection(
 	ctx: CanvasRenderingContext2D,
@@ -392,22 +394,51 @@ function paintSection(
 	field: HeightField | null,
 	facing: Facing,
 	view: View,
-	uMin: number,
-	uMax: number
+	profile: readonly { u: number; z: number }[]
 ): void {
-	if (!field) return;
+	if (!field || profile.length < 2) return;
+	const uMin = profile[0].u;
+	const uMax = profile[profile.length - 1].u;
 	const line = sectionProfile(doc, field, facing, uMin, uMax);
 	if (line.length < 2) return;
+	const highest = (u: number): number => {
+		const t = ((u - uMin) / (uMax - uMin)) * (profile.length - 1);
+		const i = Math.min(profile.length - 1, Math.max(0, Math.round(t)));
+		return profile[i].z;
+	};
+
 	ctx.save();
-	ctx.beginPath();
-	line.forEach((p, i) => {
-		const s = toScreen(view, { x: p.u, y: p.z });
-		if (i === 0) ctx.moveTo(s.x, s.y);
-		else ctx.lineTo(s.x, s.y);
-	});
 	ctx.strokeStyle = PLAN.select;
 	ctx.lineWidth = LINE_PX.normal;
+	let apart = false;
+	let widest: { u: number; z: number; gap: number } | null = null;
+	ctx.beginPath();
+	for (const p of line) {
+		const gap = highest(p.u) - p.z;
+		const s = toScreen(view, { x: p.u, y: p.z });
+		if (gap > SECTION_GAP) {
+			if (!apart) ctx.moveTo(s.x, s.y);
+			else ctx.lineTo(s.x, s.y);
+			apart = true;
+			if (!widest || gap > widest.gap) widest = { u: p.u, z: p.z, gap };
+		} else {
+			apart = false;
+		}
+	}
 	ctx.stroke();
+
+	if (widest) {
+		const s = toScreen(view, { x: widest.u, y: widest.z });
+		ctx.font = '11px Archivo, system-ui, sans-serif';
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'top';
+		const text = 'marken mitt på tomten';
+		const w = ctx.measureText(text).width;
+		ctx.fillStyle = PLAN.paper;
+		ctx.fillRect(s.x - w / 2 - 3, s.y + 4, w + 6, 15);
+		ctx.fillStyle = PLAN.contourText;
+		ctx.fillText(text, s.x, s.y + 6);
+	}
 	ctx.restore();
 }
 

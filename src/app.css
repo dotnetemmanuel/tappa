@@ -56,11 +56,14 @@ body {
 	border-radius: 2px;
 }
 
-button,
-input,
-select {
-	font: inherit;
-	color: inherit;
+/* Layered, or this beats every text colour utility: unlayered rules outrank Tailwind's. */
+@layer base {
+	button,
+	input,
+	select {
+		font: inherit;
+		color: inherit;
+	}
 }
 
 input[type='number']::-webkit-inner-spin-button,

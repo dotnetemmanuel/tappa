@@ -3,7 +3,13 @@ import { createDoc } from '../doc/doc.js';
 import { makeSpot } from '../doc/factory.js';
 import type { Doc } from '../doc/types.js';
 import { buildField, heightAt } from './field.js';
-import { elevationBounds, handleAt, slopeHandles, tiltFactor } from './section.js';
+import {
+	elevationBounds,
+	handleAt,
+	sectionVertices,
+	slopeHandles,
+	tiltFactor
+} from './section.js';
 
 /** Falls 2 m from west to east, level north to south. */
 function slopingPlot(): Doc {
@@ -183,5 +189,37 @@ describe('tiltFactor', () => {
 
 	it('does nothing when the two ends are the same place', () => {
 		expect(tiltFactor('s', 5, 5, { x: 9, y: 1 })).toBe(0);
+	});
+});
+
+describe('sectionVertices', () => {
+	it('takes the points standing on the line', () => {
+		const doc = slopingPlot();
+		doc.entities.push(makeSpot({ x: 6, y: 10 }, -0.5));
+		expect(sectionVertices(doc, 's').map((v) => v.u)).toContain(6);
+	});
+
+	it('leaves out a point off to the side, whose height is not the height here', () => {
+		const doc = slopingPlot();
+		doc.entities.push(makeSpot({ x: 6, y: 19 }, 3));
+		expect(sectionVertices(doc, 's').some((v) => v.u === 6)).toBe(false);
+	});
+
+	it('puts every vertex exactly on the line it is drawn against', () => {
+		const doc = slopingPlot();
+		doc.entities.push(makeSpot({ x: 6, y: 10 }, -0.5));
+		doc.entities.push(makeSpot({ x: 14, y: 10.4 }, -1.9));
+		const field = buildField(doc);
+		for (const v of sectionVertices(doc, 's')) {
+			expect(v.z).toBeCloseTo(handleAt(doc, field, 's', v.u).z, 1);
+		}
+	});
+
+	it('reads the points in order across the view', () => {
+		const doc = slopingPlot();
+		doc.entities.push(makeSpot({ x: 14, y: 10 }, -1.9));
+		doc.entities.push(makeSpot({ x: 6, y: 10 }, -0.5));
+		const us = sectionVertices(doc, 's').map((v) => v.u);
+		expect(us).toEqual([...us].sort((a, b) => a - b));
 	});
 });
