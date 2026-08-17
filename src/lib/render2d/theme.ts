@@ -15,6 +15,11 @@ export const PLAN = {
 	contourIndex: '#75825c',
 	contourText: '#4f5c42',
 	slopeTint: '#5d6b45',
+	earth: '#d9d2be',
+	earthLine: '#6f6a55',
+	faceFill: '#dcdccb',
+	baseFill: '#c4c5b5',
+	roofFill: '#a8a094',
 	draft: '#2f473d',
 	warn: '#c2543a'
 } as const;

@@ -5,6 +5,7 @@ import { defaultSnapSettings, type SnapSettings } from '../core/geom/snap.js';
 import type { ShadowGrid } from '../core/sun/shadow.js';
 import { buildField, type HeightField } from '../core/terrain/field.js';
 import type { PropId, SpeciesId } from '../core/doc/types.js';
+import type { Facing } from '../render2d/elevation.js';
 import { createView, fitTo, type View } from '../render2d/view.js';
 
 export type ToolId =
@@ -52,7 +53,7 @@ export const TOOLS: readonly { id: ToolId; sv: string; key: string; hint: string
 	{ id: 'text', sv: 'Text', key: 't', hint: 'Klicka där texten ska stå' }
 ];
 
-export type ViewMode = 'plan' | 'split' | 'scene';
+export type ViewMode = 'plan' | 'split' | 'scene' | 'elevation';
 
 /**
  * The single source of truth the whole UI reads. The document itself is a plain
@@ -76,6 +77,8 @@ export class AppState {
 	bankRun = $state(2);
 	status = $state('');
 	viewMode = $state<ViewMode>('plan');
+	/** Which side of the plot the elevation view looks from. */
+	facing = $state<Facing>('s');
 	/** Years since planting for the whole garden, 0 to 30. */
 	years = $state(0);
 	// Always replaced wholesale by setWhen, never mutated in place, so a plain Date stays reactive.

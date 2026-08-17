@@ -3,6 +3,7 @@ import type { Doc } from '../core/doc/types.js';
 import type { Rect } from '../core/geom/vec2.js';
 import { buildField, type HeightField } from '../core/terrain/field.js';
 import { createPainter, type Overlay } from '../render2d/painter.js';
+import { elevationBounds, paintElevation, FACING_SV, type Facing } from '../render2d/elevation.js';
 import { PLAN } from '../render2d/theme.js';
 import type { View } from '../render2d/view.js';
 import {
@@ -155,6 +156,72 @@ export async function exportPlanPng(doc: Doc, o: PlanExportOptions = {}): Promis
 		drawScaleBar(ctx, { x: content.x, y: content.y + content.h + 12 }, fit.pxPerMetre);
 		drawTitleBlock(ctx, cssW, cssH, {
 			name: doc.meta.name,
+			date: doc.meta.modified.slice(0, 10),
+			scaleLabel: fit.label,
+			northOffset: doc.meta.northOffset
+		});
+	}
+	ctx.restore();
+
+	return toPng(canvas);
+}
+
+export type ElevationExportOptions = PlanExportOptions & { facing?: Facing };
+
+/** The side view on a sheet, framed the same way the plan sheet is. */
+export async function exportElevationPng(
+	doc: Doc,
+	o: ElevationExportOptions = {}
+): Promise<Blob> {
+	const facing = o.facing ?? 's';
+	const widthPx = Math.max(64, Math.round(o.widthPx ?? DEFAULT_W));
+	const heightPx = Math.max(64, Math.round(o.heightPx ?? DEFAULT_H));
+	const dpr = Math.max(1, widthPx / LAYOUT_W);
+	const cssW = widthPx / dpr;
+	const cssH = heightPx / dpr;
+
+	const furniture = o.titleBlock ?? true;
+	const margin = o.margin ?? 48;
+	const inset = furniture ? SHEET_INSET + margin : margin;
+	const bottom = furniture ? inset + TITLE_BLOCK_H + SCALE_BAR_ZONE : inset;
+	const content: Box = {
+		x: inset,
+		y: inset,
+		w: Math.max(32, cssW - inset * 2),
+		h: Math.max(32, cssH - inset - bottom)
+	};
+
+	const field = buildField(doc);
+	const b = elevationBounds(doc, field, facing);
+	const r: Rect = { min: b.min, max: b.max };
+	const fit = fitScale(r.max.x - r.min.x, r.max.y - r.min.y, content.w, content.h);
+
+	const canvas = newCanvas(widthPx, heightPx);
+	const ctx = canvas.getContext('2d');
+	if (!ctx) throw new Error('Kunde inte skapa en 2D-yta för exporten.');
+	ctx.save();
+	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+	ctx.fillStyle = PLAN.paper;
+	ctx.fillRect(0, 0, cssW, cssH);
+	ctx.beginPath();
+	ctx.rect(content.x, content.y, content.w, content.h);
+	ctx.clip();
+	paintElevation(
+		ctx,
+		doc,
+		field,
+		facing,
+		frameIn(r, content, fit.pxPerMetre, cssW, cssH),
+		{ years: o.years ?? 0, month: o.month ?? 7 }
+	);
+	ctx.restore();
+
+	ctx.save();
+	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+	if (furniture) {
+		drawScaleBar(ctx, { x: content.x, y: content.y + content.h + 12 }, fit.pxPerMetre);
+		drawTitleBlock(ctx, cssW, cssH, {
+			name: `${doc.meta.name} · ${FACING_SV[facing].toLowerCase()}`,
 			date: doc.meta.modified.slice(0, 10),
 			scaleLabel: fit.label,
 			northOffset: doc.meta.northOffset

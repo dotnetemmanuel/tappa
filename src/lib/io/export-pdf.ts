@@ -1,7 +1,8 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from 'pdf-lib';
 import type { Doc } from '../core/doc/types.js';
 import { formatArea, formatLength } from '../core/doc/dimension.js';
-import { exportPlanPng, exportViewPng } from './export-image.js';
+import { exportElevationPng, exportPlanPng, exportViewPng } from './export-image.js';
+import type { Facing } from '../render2d/elevation.js';
 import { GROUP_SV, takeoff, type Takeoff } from './takeoff.js';
 
 export type PdfOptions = {
@@ -9,6 +10,8 @@ export type PdfOptions = {
 	orientation?: 'portrait' | 'landscape';
 	includeView?: boolean;
 	viewCanvas?: HTMLCanvasElement | null;
+	/** Sides to add as elevation sheets. Empty or absent leaves them out. */
+	elevations?: readonly Facing[];
 };
 
 /** Short and long edge in points, 72 to the inch. */
@@ -250,6 +253,17 @@ export async function exportPdf(doc: Doc, o: PdfOptions = {}): Promise<Blob> {
 	});
 	const planImage = await pdf.embedPng(await plan.arrayBuffer());
 	pdf.addPage([pw, ph]).drawImage(planImage, { x: 0, y: 0, width: pw, height: ph });
+
+	for (const facing of o.elevations ?? []) {
+		const sheet = await exportElevationPng(doc, {
+			widthPx: Math.round((pw / 72) * PRINT_DPI),
+			heightPx: Math.round((ph / 72) * PRINT_DPI),
+			titleBlock: true,
+			facing
+		});
+		const image = await pdf.embedPng(await sheet.arrayBuffer());
+		pdf.addPage([pw, ph]).drawImage(image, { x: 0, y: 0, width: pw, height: ph });
+	}
 
 	const schedules = pdf.addPage([pw, ph]);
 	drawSchedules(pdf, { page: schedules, y: ph - MARGIN, w: pw, h: ph }, fonts, doc, takeoff(doc));

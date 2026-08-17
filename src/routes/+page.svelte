@@ -13,6 +13,7 @@
 	import Inspector from '$lib/ui/Inspector.svelte';
 	import LayerPanel from '$lib/ui/LayerPanel.svelte';
 	import MaterialPalette from '$lib/ui/MaterialPalette.svelte';
+	import ElevationView from '$lib/ui/ElevationView.svelte';
 	import PlanCanvas from '$lib/ui/PlanCanvas.svelte';
 	import PlantPalette from '$lib/ui/PlantPalette.svelte';
 	import Shortcuts from '$lib/ui/Shortcuts.svelte';
@@ -216,7 +217,13 @@
 		<Toolbar {app} />
 
 		<main class="relative flex min-w-0 flex-1">
-			{#if app.viewMode !== 'scene'}
+			{#if app.viewMode === 'elevation'}
+				<div class="min-w-0 flex-1">
+					<ElevationView {app} />
+				</div>
+			{/if}
+
+			{#if app.viewMode !== 'scene' && app.viewMode !== 'elevation'}
 				<div class="relative min-w-0 flex-1">
 					<PlanCanvas {app} {plan} />
 
@@ -243,7 +250,7 @@
 				</div>
 			{/if}
 
-			{#if app.viewMode !== 'plan'}
+			{#if app.viewMode !== 'plan' && app.viewMode !== 'elevation'}
 				<div
 					class="min-w-0 flex-1"
 					class:border-l={app.viewMode === 'split'}
@@ -260,7 +267,7 @@
 			{/if}
 
 			<div class="absolute right-2 top-2 flex gap-1 rounded-md border border-line bg-bark/90 p-0.5">
-				{#each [['plan', 'Plan'], ['split', 'Delad'], ['scene', '3D']] as const as [mode, label] (mode)}
+				{#each [['plan', 'Plan'], ['split', 'Delad'], ['scene', '3D'], ['elevation', 'Fasad']] as const as [mode, label] (mode)}
 					<button
 						type="button"
 						class="rounded px-2 py-1 text-[12px] transition-colors"

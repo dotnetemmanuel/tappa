@@ -1,5 +1,10 @@
 <script lang="ts">
-	import { downloadBlob, exportPlanPng, exportViewPng } from '../io/export-image.js';
+	import {
+		downloadBlob,
+		exportElevationPng,
+		exportPlanPng,
+		exportViewPng
+	} from '../io/export-image.js';
 	import { exportPdf } from '../io/export-pdf.js';
 	import { plantingListCsv, takeoffCsv } from '../io/takeoff.js';
 	import { suggestFilename } from '../io/tappa.js';
@@ -69,6 +74,24 @@
 			<button
 				type="button"
 				role="menuitem"
+				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-line hover:text-chalk"
+				onclick={() =>
+					run('Fasadvy', async () =>
+						downloadBlob(
+							await exportElevationPng(app.doc, {
+								years: app.years,
+								month: app.month,
+								facing: app.facing
+							}),
+							`${stem}-fasad-${app.facing}.png`
+						)
+					)}
+			>
+				Fasadvy som PNG
+			</button>
+			<button
+				type="button"
+				role="menuitem"
 				class="block w-full rounded px-2 py-1.5 text-left text-[12px] text-sage hover:bg-line hover:text-chalk disabled:opacity-40"
 				disabled={!sceneCanvas}
 				onclick={() =>
@@ -86,7 +109,11 @@
 				onclick={() =>
 					run('PDF', async () =>
 						downloadBlob(
-							await exportPdf(app.doc, { includeView: !!sceneCanvas, viewCanvas: sceneCanvas }),
+							await exportPdf(app.doc, {
+								includeView: !!sceneCanvas,
+								viewCanvas: sceneCanvas,
+								elevations: app.terrainOn ? ([app.facing] as const) : []
+							}),
 							`${stem}.pdf`
 						)
 					)}
