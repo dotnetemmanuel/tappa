@@ -123,6 +123,36 @@
 
 		<button
 			type="button"
+			class="rounded-md p-1.5 text-sage transition-colors hover:bg-bark hover:text-chalk"
+			title={app.theme === 'dark' ? 'Byt till ljust' : 'Byt till mörkt'}
+			aria-label={app.theme === 'dark' ? 'Byt till ljust utseende' : 'Byt till mörkt utseende'}
+			onclick={() => (app.theme = app.theme === 'dark' ? 'light' : 'dark')}
+		>
+			<svg viewBox="0 0 18 18" class="h-4 w-4" aria-hidden="true">
+				{#if app.theme === 'dark'}
+					<circle cx="9" cy="9" r="3.4" fill="none" stroke="currentColor" stroke-width="1.4" />
+					<path
+						d="M9 1.6v1.8M9 14.6v1.8M1.6 9h1.8M14.6 9h1.8M3.8 3.8l1.3 1.3M12.9 12.9l1.3 1.3M14.2 3.8l-1.3 1.3M5.1 12.9l-1.3 1.3"
+						stroke="currentColor"
+						stroke-width="1.4"
+						stroke-linecap="round"
+					/>
+				{:else}
+					<path
+						d="M14.5 11.2A6 6 0 0 1 6.8 3.5a6 6 0 1 0 7.7 7.7Z"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.4"
+						stroke-linejoin="round"
+					/>
+				{/if}
+			</svg>
+		</button>
+
+		<span class="mx-1 h-4 w-px bg-line"></span>
+
+		<button
+			type="button"
 			class="rounded-md px-2.5 py-1 text-[12px] text-sage transition-colors hover:bg-bark hover:text-chalk"
 			onclick={newProject}
 		>

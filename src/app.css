@@ -2,14 +2,16 @@
 @import './lib/ui/fonts.css';
 
 @theme {
-	--color-ink: #14211c;
-	--color-bark: #1b2b25;
-	--color-raised: #223530;
-	--color-line: #2f473d;
-	--color-chalk: #e9efe6;
-	--color-sage: #93a89b;
-	--color-seed: #dfa53c;
+	--color-ink: #0f1a17;
+	--color-bark: #182621;
+	--color-raised: #21332d;
+	--color-line: #2d443c;
+	--color-chalk: #eef3ea;
+	--color-sage: #8ea497;
+	--color-seed: #e2a73e;
 	--color-paper: #eceee2;
+	/* Ink on the drawing. The sheet never changes with the theme, so neither can what is written on it. */
+	--color-drawn: #3b463c;
 	--color-grid-m: #d3d9c4;
 	--color-grid-5m: #bcc4a9;
 
@@ -28,6 +30,26 @@
 	--lift-pop: 0 12px 28px rgb(0 0 0 / 0.5);
 	--control-h: 1.75rem;
 	--radius: 0.375rem;
+}
+
+/*
+ * The light theme is the same interface in beige rather than a second set of components:
+ * only the token values change, so every panel, field and button follows on its own.
+ * The drawing keeps `paper` in both, so a plan looks the same as the one you export.
+ */
+:root[data-theme='light'] {
+	color-scheme: light;
+	--color-ink: #e6dfd0;
+	--color-bark: #f3efe4;
+	--color-raised: #e9e3d5;
+	--color-line: #cdc4b0;
+	--color-chalk: #26302a;
+	--color-sage: #6b7669;
+	--color-seed: #b8791d;
+	/* Black shadows read as dirt on a light surface, so they lighten with the theme. */
+	--lift-card: 0 1px 2px rgb(45 40 25 / 0.12);
+	--lift-sheet: 0 8px 24px rgb(45 40 25 / 0.18);
+	--lift-pop: 0 10px 24px rgb(45 40 25 / 0.22);
 }
 
 html,

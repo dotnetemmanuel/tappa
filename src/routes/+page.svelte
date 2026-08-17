@@ -7,7 +7,7 @@
 	import { migrate } from '$lib/io/migrate.js';
 	import { getKV, isStorageAvailable, loadProject, saveProject, setKV } from '$lib/io/store.js';
 	import { toWorld } from '$lib/render2d/view.js';
-	import { AppState, TOOLS } from '$lib/ui/app.svelte.js';
+	import { AppState, TOOLS, type Theme } from '$lib/ui/app.svelte.js';
 	import { PlanController } from '$lib/ui/plan.svelte.js';
 	import CalibrationBar from '$lib/ui/CalibrationBar.svelte';
 	import Inspector from '$lib/ui/Inspector.svelte';
@@ -148,6 +148,11 @@
 		addImages(files, at);
 	}
 
+	$effect(() => {
+		document.documentElement.dataset.theme = app.theme;
+		if (restored && isStorageAvailable()) setKV('theme', app.theme);
+	});
+
 	onMount(() => {
 		// Only the hint, not the tool: resetting it here would clobber a tool the
 		// user picked while the page was still starting up.
@@ -159,12 +164,16 @@
 				restored = true;
 				return;
 			}
+			// Your own choice wins; the system setting is only the first answer.
+			const saved = await getKV<Theme>('theme');
+			app.theme =
+				saved ?? (window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
 			const id = (await getKV<string>('lastProject')) ?? crypto.randomUUID();
 			app.projectId = id;
-			const saved = await loadProject(id);
-			if (saved) {
+			const project = await loadProject(id);
+			if (project) {
 				try {
-					app.loadDoc(migrate(saved));
+					app.loadDoc(migrate(project));
 				} catch {
 					app.status = 'Det sparade projektet gick inte att läsa, börjar om.';
 				}
@@ -265,7 +274,7 @@
 			{/if}
 
 			<div
-				class="absolute top-4 right-4 flex gap-0.5 rounded-lg border border-line bg-bark/95 p-1 shadow-[var(--lift-pop)] backdrop-blur"
+				class="absolute top-5 right-6 flex gap-0.5 rounded-lg border border-line bg-bark/95 p-1 shadow-[var(--lift-pop)] backdrop-blur"
 			>
 				{#each [['plan', 'Plan'], ['split', 'Delad'], ['scene', '3D'], ['elevation', 'Fasad']] as const as [mode, label] (mode)}
 					<button

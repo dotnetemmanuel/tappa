@@ -17,8 +17,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'lawn',
 		sv: 'Gräsmatta',
 		en: 'Lawn',
-		fill: '#8faa62',
-		stroke: '#6f8a48',
+		fill: '#7fa055',
+		stroke: '#5f7f3c',
 		pattern: 'grass',
 		group: 'soft'
 	},
@@ -26,8 +26,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'meadow',
 		sv: 'Äng',
 		en: 'Meadow',
-		fill: '#a3b06a',
-		stroke: '#7f8c4c',
+		fill: '#b3b167',
+		stroke: '#8d8a49',
 		pattern: 'grass',
 		group: 'soft'
 	},
@@ -35,8 +35,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'bed',
 		sv: 'Rabatt',
 		en: 'Planting bed',
-		fill: '#7a5c42',
-		stroke: '#5d4632',
+		fill: '#5d4431',
+		stroke: '#432f21',
 		pattern: 'soil',
 		group: 'soft'
 	},
@@ -44,8 +44,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'bark',
 		sv: 'Barkmylla',
 		en: 'Bark mulch',
-		fill: '#8a6742',
-		stroke: '#6b4f32',
+		fill: '#8c5733',
+		stroke: '#6a3f24',
 		pattern: 'bark',
 		group: 'soft'
 	},
@@ -53,8 +53,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'kitchen',
 		sv: 'Köksland',
 		en: 'Kitchen garden',
-		fill: '#8a6b45',
-		stroke: '#6a5134',
+		fill: '#9c8154',
+		stroke: '#79613c',
 		pattern: 'soil',
 		group: 'soft'
 	},
@@ -62,8 +62,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'gravel',
 		sv: 'Grus',
 		en: 'Gravel',
-		fill: '#c2bcae',
-		stroke: '#9d968a',
+		fill: '#c9bda1',
+		stroke: '#a2967a',
 		pattern: 'gravel',
 		group: 'hard'
 	},
@@ -71,8 +71,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'stonedust',
 		sv: 'Stenmjöl',
 		en: 'Stone dust',
-		fill: '#cac5b6',
-		stroke: '#a49e90',
+		fill: '#ded8c8',
+		stroke: '#b3ad9d',
 		pattern: 'gravel',
 		group: 'hard'
 	},
@@ -80,8 +80,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'paving',
 		sv: 'Plattor',
 		en: 'Paving slabs',
-		fill: '#bdbdb6',
-		stroke: '#8f8f89',
+		fill: '#b0b5b3',
+		stroke: '#868c8a',
 		pattern: 'paving',
 		group: 'hard'
 	},
@@ -89,8 +89,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'cobble',
 		sv: 'Smågatsten',
 		en: 'Cobbles',
-		fill: '#a8a8a4',
-		stroke: '#7d7d79',
+		fill: '#8b9095',
+		stroke: '#666c71',
 		pattern: 'stone',
 		group: 'hard'
 	},
@@ -98,8 +98,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'asphalt',
 		sv: 'Asfalt',
 		en: 'Asphalt',
-		fill: '#6e6e70',
-		stroke: '#525254',
+		fill: '#4e5155',
+		stroke: '#35383b',
 		pattern: 'none',
 		group: 'hard'
 	},
@@ -107,8 +107,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'deck',
 		sv: 'Trädäck',
 		en: 'Timber deck',
-		fill: '#b08b5c',
-		stroke: '#8a6c45',
+		fill: '#b98a4e',
+		stroke: '#8f6935',
 		pattern: 'deck',
 		group: 'hard'
 	},
@@ -116,8 +116,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'concrete',
 		sv: 'Betong',
 		en: 'Concrete',
-		fill: '#b6b6b0',
-		stroke: '#8b8b86',
+		fill: '#c6c3b8',
+		stroke: '#9a978c',
 		pattern: 'none',
 		group: 'hard'
 	},
@@ -125,8 +125,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'water',
 		sv: 'Vatten',
 		en: 'Water',
-		fill: '#6f9fb5',
-		stroke: '#4e7d92',
+		fill: '#4f97b4',
+		stroke: '#2f7391',
 		pattern: 'water',
 		group: 'water'
 	},
@@ -134,8 +134,8 @@ export const MATERIALS: readonly MaterialDef[] = [
 		id: 'building',
 		sv: 'Byggnad',
 		en: 'Building',
-		fill: '#9a9086',
-		stroke: '#6f675e',
+		fill: '#8d8377',
+		stroke: '#655d53',
 		pattern: 'none',
 		group: 'structure'
 	}
@@ -163,7 +163,7 @@ export const LINE_STYLES: readonly LineStyleDef[] = [
 		id: 'staket',
 		sv: 'Staket',
 		en: 'Picket fence',
-		colour: '#d8d2c4',
+		colour: '#e2ded2',
 		defaultHeight: 0.9,
 		defaultThickness: 0.05,
 		render: 'posts'
@@ -172,7 +172,7 @@ export const LINE_STYLES: readonly LineStyleDef[] = [
 		id: 'plank',
 		sv: 'Plank',
 		en: 'Solid fence',
-		colour: '#a98a63',
+		colour: '#9d7c53',
 		defaultHeight: 1.8,
 		defaultThickness: 0.1,
 		render: 'solid'
@@ -181,7 +181,7 @@ export const LINE_STYLES: readonly LineStyleDef[] = [
 		id: 'glespanel',
 		sv: 'Glespanel',
 		en: 'Slatted fence',
-		colour: '#b99a72',
+		colour: '#c2a075',
 		defaultHeight: 1.6,
 		defaultThickness: 0.08,
 		render: 'panel'
@@ -190,7 +190,7 @@ export const LINE_STYLES: readonly LineStyleDef[] = [
 		id: 'gunnebo',
 		sv: 'Gunnebostängsel',
 		en: 'Wire mesh',
-		colour: '#9aa2a0',
+		colour: '#aab2b0',
 		defaultHeight: 1.2,
 		defaultThickness: 0.03,
 		render: 'mesh'
@@ -199,7 +199,7 @@ export const LINE_STYLES: readonly LineStyleDef[] = [
 		id: 'stenmur',
 		sv: 'Stenmur',
 		en: 'Stone wall',
-		colour: '#9c9a92',
+		colour: '#8f8d84',
 		defaultHeight: 0.6,
 		defaultThickness: 0.4,
 		render: 'stone'
@@ -208,7 +208,7 @@ export const LINE_STYLES: readonly LineStyleDef[] = [
 		id: 'hack',
 		sv: 'Häck',
 		en: 'Hedge',
-		colour: '#5f7d46',
+		colour: '#4f7440',
 		defaultHeight: 1.4,
 		defaultThickness: 0.6,
 		render: 'hedge'
@@ -217,7 +217,7 @@ export const LINE_STYLES: readonly LineStyleDef[] = [
 		id: 'spalje',
 		sv: 'Spaljé',
 		en: 'Trellis',
-		colour: '#b08b5c',
+		colour: '#c49a63',
 		defaultHeight: 1.8,
 		defaultThickness: 0.04,
 		render: 'trellis'
@@ -226,7 +226,7 @@ export const LINE_STYLES: readonly LineStyleDef[] = [
 		id: 'kant',
 		sv: 'Kantstöd',
 		en: 'Edging',
-		colour: '#8d8a82',
+		colour: '#7c7a73',
 		defaultHeight: 0.1,
 		defaultThickness: 0.05,
 		render: 'solid'

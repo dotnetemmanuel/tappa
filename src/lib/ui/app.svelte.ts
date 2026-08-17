@@ -55,6 +55,8 @@ export const TOOLS: readonly { id: ToolId; sv: string; key: string; hint: string
 
 export type ViewMode = 'plan' | 'split' | 'scene' | 'elevation';
 
+export type Theme = 'dark' | 'light';
+
 /**
  * The single source of truth the whole UI reads. The document itself is a plain
  * object outside the rune graph: it is too big to proxy, so edits announce
@@ -92,6 +94,7 @@ export class AppState {
 	showShadow = $state(false);
 	shadowBusy = $state(false);
 	showChecks = $state(true);
+	theme = $state<Theme>('dark');
 	projectId = $state('');
 	/** Set by the 3D view so exports can grab the current frame. */
 	sceneCanvas = $state<HTMLCanvasElement | null>(null);

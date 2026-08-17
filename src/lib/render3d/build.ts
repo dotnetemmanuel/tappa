@@ -158,7 +158,7 @@ export function buildGround(doc: Doc, field: HeightField | null): Group {
 	// Past the field the ground carries on at its edge height, so the world does not end in a cliff.
 	const terrain = new Mesh(
 		new PlaneGeometry(span, span, field ? 96 : 1, field ? 96 : 1).rotateX(-Math.PI / 2),
-		field ? terrainMaterial() : colourMaterial('#6f7f52', { rough: 1 })
+		field ? terrainMaterial() : colourMaterial('#66774d', { rough: 1 })
 	);
 	if (field) liftPlane(terrain.geometry, field, centre, 0.03);
 	terrain.position.set(centre.x, -0.02, -centre.y);
@@ -181,7 +181,7 @@ export function buildGround(doc: Doc, field: HeightField | null): Group {
 			? drapedGeometry(drape(field, doc.plot.boundary, [], 0.008, field.cell))
 			: ringToGeometry(doc.plot.boundary, [], -0.005);
 		if (g) {
-			const plot = new Mesh(g, colourMaterial('#7d8f5c', { rough: 1 }));
+			const plot = new Mesh(g, colourMaterial('#76885a', { rough: 1 }));
 			plot.receiveShadow = true;
 			plot.name = 'plot';
 			group.add(plot);
@@ -214,14 +214,14 @@ function contourMesh(f: HeightField, interval: number): Object3D | null {
 	if (pts.length === 0) return null;
 	const g = new BufferGeometry();
 	g.setAttribute('position', new BufferAttribute(new Float32Array(pts), 3));
-	const mesh = new LineSegments(g, new LineBasicMaterial({ color: new Color('#43512f') }));
+	const mesh = new LineSegments(g, new LineBasicMaterial({ color: new Color('#3c4a2c') }));
 	mesh.name = 'contours';
 	return mesh;
 }
 
 /** Low ground darker and cooler, high ground lighter and warmer. Value, not hue, so plants keep the colour. */
-const GROUND_LOW = new Color('#4e5c3a');
-const GROUND_HIGH = new Color('#8b9a63');
+const GROUND_LOW = new Color('#46583a');
+const GROUND_HIGH = new Color('#93a266');
 
 function heightRange(f: HeightField): { lo: number; hi: number } {
 	let lo = Infinity;
@@ -531,8 +531,8 @@ function buildWalls(doc: Doc, field: HeightField | null): Object3D {
 		const parts = wallParts(doc, e, field);
 		// The base storey takes the foundation colour, so a suterrang wall reads as a base and not as a very tall wall.
 		for (const [solid, colour] of [
-			[parts.storey, '#d9d3c6'],
-			[parts.base, '#b9b3a8']
+			[parts.storey, '#e0d9c9'],
+			[parts.base, '#b5afa3']
 		] as const) {
 			if (solid.indices.length === 0) continue;
 			const mesh = new Mesh(solidToGeometry(solid), colourMaterial(colour, { rough: 0.95 }));
@@ -561,7 +561,7 @@ function buildRoofs(doc: Doc): Object3D {
 		if (e.k !== 'roof') continue;
 		const built = buildRoof(doc, e);
 		if (!built || built.solid.indices.length === 0) continue;
-		const mesh = new Mesh(solidToGeometry(built.solid), colourMaterial('#5a5550', { rough: 0.95 }));
+		const mesh = new Mesh(solidToGeometry(built.solid), colourMaterial('#4b4c49', { rough: 0.95 }));
 		mesh.castShadow = true;
 		mesh.receiveShadow = true;
 		tagEntity(mesh, e.id);

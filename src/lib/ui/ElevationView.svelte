@@ -306,7 +306,7 @@
 
 	{#if editing}
 		<input
-			class="num absolute w-24 rounded-md border border-seed bg-paper px-1.5 text-right text-[12px] text-ink"
+			class="num absolute w-24 rounded-md border border-seed bg-paper px-1.5 text-right text-[12px] text-drawn"
 			style:left="{editing.x}px"
 			style:top="{editing.y}px"
 			value={editing.value}
