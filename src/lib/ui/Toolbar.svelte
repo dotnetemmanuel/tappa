@@ -17,6 +17,7 @@
 		prop: 'M3 8 h12 v6 H3 Z M4 8 V6 h10 v2 M5 14 v2 M13 14 v2',
 		image: 'M2 4 h14 v10 H2 Z M2 11 l4 -4 3 3 3 -3 4 4',
 		dim: 'M2 4 v10 M16 4 v10 M2 9 h14 M4 7 L2 9 L4 11 M14 7 L16 9 L14 11',
+		spot: 'M2 12 c4 -3 8 -1 14 -5 M2 15.5 c4 -3 8 -1 14 -5 M5 3 L9 7 M9 3 L5 7',
 		text: 'M3 4 h12 M9 4 v11 M6 15 h6'
 	};
 </script>

@@ -11,6 +11,10 @@ export const PLAN = {
 	snap: '#c8631f',
 	guide: 'rgba(200, 99, 31, 0.55)',
 	dim: '#42504a',
+	contour: '#a9b493',
+	contourIndex: '#75825c',
+	contourText: '#4f5c42',
+	slopeTint: '#5d6b45',
 	draft: '#2f473d',
 	warn: '#c2543a'
 } as const;

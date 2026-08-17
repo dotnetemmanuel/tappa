@@ -1,4 +1,6 @@
-import type { Doc, Entity, EntityId, SurfaceMat } from '../core/doc/types.js';
+import type { AreaEntity, Doc, Entity, EntityId, SpotEntity, SurfaceMat } from '../core/doc/types.js';
+import { contourLines, type ContourLine } from '../core/terrain/contour.js';
+import { heightAt, type HeightField } from '../core/terrain/field.js';
 import { entityRing, entityVertices, imageCorners, isEditable, layerOf } from '../core/doc/doc.js';
 import { dimGeometry, formatLength, formatRing } from '../core/doc/dimension.js';
 import { lineStyle, material } from '../core/doc/materials.js';
@@ -37,6 +39,8 @@ export type Overlay = {
 	checks?: readonly Check[];
 	/** Resolves an image asset to something drawable, once phase 7 populates it. */
 	image?: (assetId: string) => CanvasImageSource | null;
+	/** The baked ground, or null on a flat plot. */
+	field?: HeightField | null;
 };
 
 export type Painter = {
@@ -65,6 +69,9 @@ export function createPainter(canvas: HTMLCanvasElement): Painter {
 		ctx.fillRect(0, 0, view.w, view.h);
 
 		if (o.showGrid) paintGrid(ctx, view);
+		if (o.field && layerOf(doc, 'ground')?.visible !== false) {
+			paintContours(ctx, view, o.field, doc.meta.contour);
+		}
 		paintPlot(ctx, doc, view);
 
 		for (const layer of doc.layers) {
@@ -127,6 +134,204 @@ function paintGrid(ctx: CanvasRenderingContext2D, view: View): void {
 	ctx.moveTo(0, Math.round(origin.y) + 0.5);
 	ctx.lineTo(view.w, Math.round(origin.y) + 0.5);
 	ctx.stroke();
+}
+
+type ContourCache = { interval: number; lines: ContourLine[] };
+const contourCache = new WeakMap<HeightField, ContourCache>();
+
+/** Tracing the whole field every frame is far too slow, and the field only changes on an edit. */
+function cachedContours(f: HeightField, interval: number): ContourLine[] {
+	const hit = contourCache.get(f);
+	if (hit && hit.interval === interval) return hit.lines;
+	const lines = contourLines(f, interval);
+	contourCache.set(f, { interval, lines });
+	return lines;
+}
+
+function paintContours(
+	ctx: CanvasRenderingContext2D,
+	view: View,
+	f: HeightField,
+	interval: number
+): void {
+	const step = interval > 0 ? interval : 0.25;
+	const lines = cachedContours(f, step);
+	if (lines.length === 0) return;
+	const r = visibleRect(view);
+
+	ctx.save();
+	paintSlopeShade(ctx, view, f, r);
+	ctx.lineJoin = 'round';
+	for (const index of [false, true]) {
+		ctx.beginPath();
+		ctx.strokeStyle = index ? PLAN.contourIndex : PLAN.contour;
+		ctx.lineWidth = index ? LINE_PX.normal : LINE_PX.thin;
+		for (const l of lines) {
+			if (isIndexLine(l.z, step) !== index) continue;
+			if (!crossesView(l.pts, r)) continue;
+			tracePoints(ctx, view, l.pts, false);
+		}
+		ctx.stroke();
+	}
+	paintDownhillTicks(ctx, view, f, lines, step, r);
+
+	ctx.font = '10px "IBM Plex Mono", ui-monospace, monospace';
+	ctx.fillStyle = PLAN.contourText;
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+	for (const l of lines) {
+		if (!isIndexLine(l.z, step) || l.pts.length < 3) continue;
+		if (!crossesView(l.pts, r)) continue;
+		labelContour(ctx, view, l);
+	}
+	ctx.restore();
+}
+
+const isIndexLine = (z: number, step: number): boolean => Math.round(z / step) % 5 === 0;
+
+/** Low ground shaded a little darker, so the shape of the land reads before you read a number. */
+function paintSlopeShade(
+	ctx: CanvasRenderingContext2D,
+	view: View,
+	f: HeightField,
+	r: { min: Vec2; max: Vec2 }
+): void {
+	let lo = Infinity;
+	let hi = -Infinity;
+	for (const h of f.h) {
+		if (h < lo) lo = h;
+		if (h > hi) hi = h;
+	}
+	if (!(hi - lo > 0.2)) return;
+	// Never smaller than about eight pixels, or a zoomed out plot would fill the frame with fillRects.
+	const step = Math.max(f.cell, 8 / view.scale);
+	const px = Math.ceil(step * view.scale) + 1;
+	ctx.save();
+	for (let y = Math.max(f.y0, r.min.y); y <= Math.min(f.y0 + (f.ny - 1) * f.cell, r.max.y); y += step) {
+		for (let x = Math.max(f.x0, r.min.x); x <= Math.min(f.x0 + (f.nx - 1) * f.cell, r.max.x); x += step) {
+			const t = (heightAt(f, x + step / 2, y + step / 2) - lo) / (hi - lo);
+			const p = toScreen(view, { x, y: y + step });
+			ctx.globalAlpha = 0.16 * (1 - t);
+			ctx.fillStyle = PLAN.slopeTint;
+			ctx.fillRect(Math.floor(p.x), Math.floor(p.y), px, px);
+		}
+	}
+	ctx.restore();
+}
+
+/** Short ticks on the downhill side of an index line, the drafting way to show which way is down. */
+function paintDownhillTicks(
+	ctx: CanvasRenderingContext2D,
+	view: View,
+	f: HeightField,
+	lines: readonly ContourLine[],
+	step: number,
+	r: { min: Vec2; max: Vec2 }
+): void {
+	const len = 4;
+	ctx.save();
+	ctx.strokeStyle = PLAN.contourIndex;
+	ctx.lineWidth = LINE_PX.hairline;
+	ctx.beginPath();
+	for (const l of lines) {
+		if (!isIndexLine(l.z, step) || l.pts.length < 3) continue;
+		if (!crossesView(l.pts, r)) continue;
+		const every = Math.max(2, Math.round(l.pts.length / 12));
+		for (let i = every; i < l.pts.length - 1; i += every) {
+			const a = toScreen(view, l.pts[i - 1]);
+			const b = toScreen(view, l.pts[i + 1]);
+			const dx = b.x - a.x;
+			const dy = b.y - a.y;
+			const d = Math.hypot(dx, dy);
+			if (d < 1) continue;
+			const p = toScreen(view, l.pts[i]);
+			// Downhill is whichever side of the line reads lower on the field.
+			const nx = -dy / d;
+			const ny = dx / d;
+			const probe = { x: l.pts[i].x + (nx / view.scale) * 6, y: l.pts[i].y - (ny / view.scale) * 6 };
+			const sign = heightAt(f, probe.x, probe.y) < l.z ? 1 : -1;
+			ctx.moveTo(p.x, p.y);
+			ctx.lineTo(p.x + nx * len * sign, p.y + ny * len * sign);
+		}
+	}
+	ctx.stroke();
+	ctx.restore();
+}
+
+
+function crossesView(pts: readonly Vec2[], r: { min: Vec2; max: Vec2 }): boolean {
+	for (const p of pts) {
+		if (p.x >= r.min.x && p.x <= r.max.x && p.y >= r.min.y && p.y <= r.max.y) return true;
+	}
+	return false;
+}
+
+/** One height on the middle of a line, laid along it, with the line cleared behind the text. */
+function labelContour(ctx: CanvasRenderingContext2D, view: View, l: ContourLine): void {
+	const i = Math.floor(l.pts.length / 2);
+	const a = toScreen(view, l.pts[i - 1]);
+	const b = toScreen(view, l.pts[i]);
+	if (Math.hypot(b.x - a.x, b.y - a.y) < 0.5) return;
+	const text = formatHeight(l.z);
+	const w = ctx.measureText(text).width;
+	let ang = Math.atan2(b.y - a.y, b.x - a.x);
+	if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+
+	ctx.save();
+	ctx.translate((a.x + b.x) / 2, (a.y + b.y) / 2);
+	ctx.rotate(ang);
+	ctx.fillStyle = PLAN.paper;
+	ctx.fillRect(-w / 2 - 2, -6, w + 4, 12);
+	ctx.fillStyle = PLAN.contourText;
+	ctx.fillText(text, 0, 0);
+	ctx.restore();
+}
+
+/** Always signed, so a height never reads as a length. */
+export function formatHeight(z: number): string {
+	const v = Math.abs(z) < 0.005 ? 0 : z;
+	return `${v > 0 ? '+' : v < 0 ? '−' : '±'}${Math.abs(v).toFixed(2).replace('.', ',')}`;
+}
+
+function paintSpot(ctx: CanvasRenderingContext2D, view: View, e: SpotEntity): void {
+	const p = toScreen(view, e.at);
+	const arm = 4.5;
+	ctx.save();
+	ctx.strokeStyle = PLAN.ink;
+	ctx.lineWidth = LINE_PX.thin;
+	ctx.beginPath();
+	ctx.moveTo(p.x - arm, p.y - arm);
+	ctx.lineTo(p.x + arm, p.y + arm);
+	ctx.moveTo(p.x + arm, p.y - arm);
+	ctx.lineTo(p.x - arm, p.y + arm);
+	ctx.stroke();
+	ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace';
+	ctx.fillStyle = PLAN.ink;
+	ctx.textAlign = 'left';
+	ctx.textBaseline = 'middle';
+	ctx.fillText(formatHeight(e.z), p.x + arm + 3, p.y);
+	ctx.restore();
+}
+
+/** The level a levelled area holds, and a tick face on a ring that is a retaining wall. */
+function paintGrade(ctx: CanvasRenderingContext2D, view: View, e: AreaEntity): void {
+	if (!e.grade || e.ring.length < 3) return;
+	ctx.save();
+	if (e.grade.edge === 'wall') {
+		ctx.beginPath();
+		tracePoints(ctx, view, e.ring, true);
+		ctx.strokeStyle = PLAN.ink;
+		ctx.lineWidth = LINE_PX.bold;
+		ctx.stroke();
+	}
+	const c = centroid(e.ring);
+	const p = toScreen(view, c);
+	ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace';
+	ctx.fillStyle = PLAN.ink;
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+	ctx.fillText(formatHeight(e.grade.level), p.x, p.y);
+	ctx.restore();
 }
 
 function tracePoints(
@@ -210,6 +415,10 @@ function paintEntity(
 	switch (e.k) {
 		case 'area':
 			if (e.ring.length >= 3) fillRing(ctx, doc, view, e.ring, e.holes, e.mat, dpr);
+			if (e.grade) paintGrade(ctx, view, e);
+			break;
+		case 'spot':
+			paintSpot(ctx, view, e);
 			break;
 		case 'path': {
 			if (e.spine.length < 2) break;

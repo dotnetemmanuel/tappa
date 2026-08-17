@@ -1,6 +1,7 @@
 import { docBounds } from '../core/doc/doc.js';
 import type { Doc } from '../core/doc/types.js';
 import type { Rect } from '../core/geom/vec2.js';
+import { buildField, type HeightField } from '../core/terrain/field.js';
 import { createPainter, type Overlay } from '../render2d/painter.js';
 import { PLAN } from '../render2d/theme.js';
 import type { View } from '../render2d/view.js';
@@ -79,7 +80,12 @@ function frameIn(r: Rect, box: Box, pxPerMetre: number, w: number, h: number): V
 	};
 }
 
-const EXPORT_OVERLAY = (grid: boolean, years: number, month: number): Overlay => ({
+const EXPORT_OVERLAY = (
+	grid: boolean,
+	years: number,
+	month: number,
+	field: HeightField | null = null
+): Overlay => ({
 	selection: new Set<string>(),
 	draft: null,
 	snap: null,
@@ -88,7 +94,8 @@ const EXPORT_OVERLAY = (grid: boolean, years: number, month: number): Overlay =>
 	showGrid: grid,
 	showVertices: false,
 	years,
-	month
+	month,
+	field
 });
 
 /** Render the plan to an offscreen canvas at export resolution and return a PNG blob. */
@@ -137,7 +144,7 @@ export async function exportPlanPng(doc: Doc, o: PlanExportOptions = {}): Promis
 	painter.draw(
 		doc,
 		frameIn(r, content, fit.pxPerMetre, cssW, cssH),
-		EXPORT_OVERLAY(o.grid ?? false, o.years ?? 0, o.month ?? 7)
+		EXPORT_OVERLAY(o.grid ?? false, o.years ?? 0, o.month ?? 7, buildField(doc))
 	);
 	ctx.restore();
 

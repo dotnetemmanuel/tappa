@@ -15,8 +15,10 @@ import {
 	makePath,
 	makePlant,
 	makeProp,
+	makeSpot,
 	makeWall
 } from '../core/doc/factory.js';
+import { heightAt } from '../core/terrain/field.js';
 import { SetNodes } from '../core/cmd/edits.js';
 import { newNodeId } from '../core/doc/doc.js';
 import { rngFor } from '../core/rng.js';
@@ -79,6 +81,8 @@ const parseNum = (s: string): number | null => {
 };
 
 const fmt = (n: number, dp: number): string => n.toFixed(dp).replace('.', ',');
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /** Draft state is a reactive proxy; the document must only ever hold plain data. */
 const plain = <T>(value: T): T => $state.snapshot(value) as T;
@@ -157,6 +161,13 @@ export class PlanController {
 			case 'prop': {
 				const e = makeProp(world, this.app.activeProp);
 				this.app.history.run(new AddEntities([e], 'Föremål'));
+				this.app.select([e.id]);
+				break;
+			}
+			case 'spot': {
+				// Starts at the ground already there, so the second point is a nudge rather than a guess.
+				const e = makeSpot(world, round2(heightAt(this.app.field, world.x, world.y)));
+				this.app.history.run(new AddEntities([e], 'Marknivå'));
 				this.app.select([e.id]);
 				break;
 			}

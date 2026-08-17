@@ -36,6 +36,7 @@
 				month: app.month,
 				shadow: app.showShadow ? app.shadow : null,
 				checks,
+				field: app.field,
 				image: getImageSync
 			});
 		});

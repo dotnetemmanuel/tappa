@@ -5,12 +5,13 @@
 	import { entityRing, findEntity } from '../core/doc/doc.js';
 	import { makeRoof } from '../core/doc/factory.js';
 	import { LINE_STYLES, MATERIALS, material } from '../core/doc/materials.js';
-	import type { Entity, Opening } from '../core/doc/types.js';
+	import type { AreaEntity, Entity, Opening } from '../core/doc/types.js';
 	import { area, pathLength, perimeter } from '../core/geom/polygon.js';
 	import { speciesOr } from '../core/plants/catalog.js';
 	import { sizeAt } from '../core/plants/growth.js';
 	import { propDefOr } from '../core/props/catalog.js';
 	import { paramsFor } from '../core/props/builders.js';
+	import { groundUnder } from '../core/terrain/query.js';
 	import { DEFAULT_DOOR, DEFAULT_WINDOW } from '../core/building/openings.js';
 	import { nextId } from '../core/doc/ids.js';
 	import type { AppState } from './app.svelte.js';
@@ -31,6 +32,7 @@
 		line: 'Linje',
 		wall: 'Vägg',
 		roof: 'Tak',
+		spot: 'Marknivå',
 		plant: 'Växt',
 		prop: 'Föremål',
 		image: 'Bild',
@@ -40,6 +42,12 @@
 
 	function edit(next: Entity, label: string): void {
 		app.history.run(new ReplaceEntities([next], label));
+	}
+
+	/** A new terrace starts at the ground it covers, so the first number is already close. */
+	function groundLevelUnder(e: AreaEntity): number {
+		const g = groundUnder(app.field, e.ring);
+		return Math.round(((g.min + g.max) / 2) * 100) / 100;
 	}
 
 	const num = (v: string, fallback: number): number => {
@@ -161,6 +169,103 @@
 					</select>
 				</label>
 				<p class="text-[11px] text-sage">{material(one.mat.id).en}</p>
+			{/if}
+
+			{#if one.k === 'spot'}
+				<label class="flex items-center justify-between gap-2">
+					<span class="text-sage">Höjd</span>
+					<span class="flex items-center gap-1">
+						<input
+							class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+							type="number"
+							step="0.05"
+							value={one.z}
+							onchange={(e) => edit({ ...one, z: num(e.currentTarget.value, one.z) }, 'Marknivå')}
+						/>
+						<span class="num text-sage">m</span>
+					</span>
+				</label>
+				<p class="text-[11px] text-sage">
+					Plus är uppåt. Noll är den nivå du själv väljer som utgångspunkt.
+				</p>
+			{/if}
+
+			{#if one.k === 'area'}
+				<label class="flex items-center justify-between gap-2">
+					<span class="text-sage">Jämnar marken</span>
+					<input
+						type="checkbox"
+						class="accent-seed"
+						checked={!!one.grade}
+						onchange={(e) =>
+							edit(
+								{
+									...one,
+									grade: e.currentTarget.checked
+										? { level: groundLevelUnder(one), edge: 'wall', run: app.bankRun }
+										: undefined
+								},
+								'Marknivå'
+							)}
+					/>
+				</label>
+				{#if one.grade}
+					{@const grade = one.grade}
+					<label class="flex items-center justify-between gap-2">
+						<span class="text-sage">Nivå</span>
+						<span class="flex items-center gap-1">
+							<input
+								class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+								type="number"
+								step="0.05"
+								value={grade.level}
+								onchange={(e) =>
+									edit(
+										{ ...one, grade: { ...grade, level: num(e.currentTarget.value, grade.level) } },
+										'Nivå'
+									)}
+							/>
+							<span class="num text-sage">m</span>
+						</span>
+					</label>
+					<label class="flex items-center justify-between gap-2">
+						<span class="text-sage">Kant</span>
+						<select
+							class="w-32 rounded bg-ink px-1.5 py-1 text-chalk"
+							value={grade.edge}
+							onchange={(e) =>
+								edit(
+									{
+										...one,
+										grade: { ...grade, edge: e.currentTarget.value === 'bank' ? 'bank' : 'wall' }
+									},
+									'Kant'
+								)}
+						>
+							<option value="wall">Mur, rakt av</option>
+							<option value="bank">Slänt</option>
+						</select>
+					</label>
+					<label class="flex items-center justify-between gap-2">
+						<span class="text-sage">Släntens bredd</span>
+						<span class="flex items-center gap-1">
+							<input
+								class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk disabled:opacity-40"
+								type="number"
+								min="0.1"
+								step="0.1"
+								disabled={grade.edge !== 'bank'}
+								value={grade.run}
+								onchange={(e) => {
+									const run = num(e.currentTarget.value, grade.run);
+									app.bankRun = run;
+									edit({ ...one, grade: { ...grade, run } }, 'Slänt');
+								}}
+							/>
+							<span class="num text-sage">m</span>
+						</span>
+					</label>
+				{/if}
 			{/if}
 
 			{#if one.k === 'path'}

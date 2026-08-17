@@ -3,6 +3,7 @@ import { createDoc, docBounds } from '../core/doc/doc.js';
 import type { Doc, EntityId, LineStyleId, MaterialId } from '../core/doc/types.js';
 import { defaultSnapSettings, type SnapSettings } from '../core/geom/snap.js';
 import type { ShadowGrid } from '../core/sun/shadow.js';
+import { buildField, type HeightField } from '../core/terrain/field.js';
 import type { PropId, SpeciesId } from '../core/doc/types.js';
 import { createView, fitTo, type View } from '../render2d/view.js';
 
@@ -20,6 +21,7 @@ export type ToolId =
 	| 'prop'
 	| 'image'
 	| 'dim'
+	| 'spot'
 	| 'text';
 
 export const TOOLS: readonly { id: ToolId; sv: string; key: string; hint: string }[] = [
@@ -38,6 +40,12 @@ export const TOOLS: readonly { id: ToolId; sv: string; key: string; hint: string
 	{ id: 'fence', sv: 'Staket och häck', key: 's', hint: 'Klicka ut en linje, Enter avslutar' },
 	{ id: 'dim', sv: 'Mått', key: 'm', hint: 'Klicka två punkter, dra ut måttlinjen' },
 	{ id: 'wall', sv: 'Vägg', key: 'w', hint: 'Klicka ut väggarna, Enter avslutar. Hörn delas mellan väggar' },
+	{
+		id: 'spot',
+		sv: 'Marknivå',
+		key: 'n',
+		hint: 'Klicka för att sätta en höjd, skriv nivån i panelen'
+	},
 	{ id: 'plant', sv: 'Växt', key: 'p', hint: 'Klicka för att plantera, dra längs en linje för en rad' },
 	{ id: 'prop', sv: 'Föremål', key: 'o', hint: 'Klicka för att placera' },
 	{ id: 'image', sv: 'Bild', key: 'i', hint: 'Klicka på en bild för att välja den, eller släpp in en ny' },
@@ -64,6 +72,8 @@ export class AppState {
 	activeLineStyle = $state<LineStyleId>('hack');
 	pathWidth = $state(1.2);
 	fenceHeight = $state(1.4);
+	/** Metres of run a new bank takes to meet the ground around a terrace. */
+	bankRun = $state(2);
 	status = $state('');
 	viewMode = $state<ViewMode>('plan');
 	/** Years since planting for the whole garden, 0 to 30. */
@@ -113,6 +123,23 @@ export class AppState {
 
 	get month(): number {
 		return this.when.getMonth() + 1;
+	}
+
+	private fieldAt = -1;
+	private fieldCache: HeightField | null = null;
+
+	/** The baked ground, rebuilt on the first read after a change. Null means flat. */
+	get field(): HeightField | null {
+		if (this.fieldAt !== this.rev) {
+			this.fieldCache = buildField(this.doc);
+			this.fieldAt = this.rev;
+		}
+		return this.fieldCache;
+	}
+
+	get terrainOn(): boolean {
+		void this.rev;
+		return this.field !== null;
 	}
 
 	setWhen(next: Date): void {
