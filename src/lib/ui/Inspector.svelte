@@ -5,13 +5,14 @@
 	import { entityRing, findEntity } from '../core/doc/doc.js';
 	import { makeRoof } from '../core/doc/factory.js';
 	import { LINE_STYLES, MATERIALS, material } from '../core/doc/materials.js';
-	import type { AreaEntity, Entity, Opening } from '../core/doc/types.js';
+	import type { AreaEntity, Entity, Opening, WallEntity } from '../core/doc/types.js';
 	import { area, pathLength, perimeter } from '../core/geom/polygon.js';
 	import { speciesOr } from '../core/plants/catalog.js';
 	import { sizeAt } from '../core/plants/growth.js';
 	import { propDefOr } from '../core/props/catalog.js';
 	import { paramsFor } from '../core/props/builders.js';
 	import { groundUnder } from '../core/terrain/query.js';
+	import { wallLoops } from '../core/building/wallgraph.js';
 	import { DEFAULT_DOOR, DEFAULT_WINDOW } from '../core/building/openings.js';
 	import { nextId } from '../core/doc/ids.js';
 	import type { AppState } from './app.svelte.js';
@@ -91,10 +92,33 @@
 	const myChecks = $derived.by(() => {
 		void app.rev;
 		if (!one || !app.showChecks) return [];
-		return runChecks(app.doc, { years: app.years, month: app.month, shadow: app.shadow }).filter(
+		return runChecks(app.doc, { years: app.years, month: app.month, shadow: app.shadow, field: app.field }).filter(
 			(c) => c.entity === one.id || c.other === one.id
 		);
 	});
+
+	/** One number for the whole house: written to every wall in the connected run. */
+	function setFloor(wall: WallEntity, floor: number): void {
+		const loop = wallLoops(app.doc).find((l) => l.walls.some((w) => w.id === wall.id));
+		const walls = loop ? loop.walls : [wall];
+		app.history.run(new ReplaceEntities(walls.map((w) => ({ ...w, floor })), 'Golvnivå'));
+	}
+
+	/** How much of the base storey stands clear of the ground, for the house this wall belongs to. */
+	const houseBase = $derived.by((): number | null => {
+		void app.rev;
+		if (!one || one.k !== 'wall' || !app.field) return null;
+		const loop = wallLoops(app.doc).find((l) => l.walls.some((w) => w.id === one.id));
+		if (!loop) return null;
+		const ground = groundUnder(app.field, loop.ring);
+		const exposed = (one.floor ?? 0) - ground.min;
+		return exposed > 0.05 ? exposed : null;
+	});
+
+	/** True when an earlier opening already carried the lower plan heading. */
+	function belowShown(wall: WallEntity, i: number): boolean {
+		return wall.openings.slice(0, i).some((o) => o.sill < 0);
+	}
 
 	function addOpening(type: 'door' | 'window'): void {
 		if (!one || one.k !== 'wall') return;
@@ -346,6 +370,25 @@
 					</span>
 				</label>
 
+				<label class="flex items-center justify-between gap-2">
+					<span class="text-sage">Golvnivå</span>
+					<span class="flex items-center gap-1">
+						<input
+							class="num w-20 rounded bg-ink px-1.5 py-0.5 text-right text-chalk"
+							type="number"
+							step="0.05"
+							value={one.floor ?? 0}
+							onchange={(e) => setFloor(one, num(e.currentTarget.value, one.floor ?? 0))}
+						/>
+						<span class="num text-sage">m</span>
+					</span>
+				</label>
+				{#if houseBase !== null}
+					<p class="text-[11px] text-sage">
+						Gäller hela huset. Souterrängvåningen syns {formatLength(houseBase)} som mest.
+					</p>
+				{/if}
+
 				<div class="pt-1">
 					<span class="mb-1 block text-sage">Öppningar ({one.openings.length})</span>
 					<div class="flex gap-1">
@@ -365,6 +408,9 @@
 						</button>
 					</div>
 					{#each one.openings as op, i (op.id)}
+						{#if op.sill < 0 && !belowShown(one, i)}
+							<p class="mt-2 text-[11px] text-sage">Nedre plan</p>
+						{/if}
 						<div class="mt-1 flex items-center gap-1">
 							<span class="w-14 shrink-0 text-[11px] text-sage">
 								{op.type === 'door' ? 'Dörr' : 'Fönster'}

@@ -18,7 +18,8 @@ import {
 	makeSpot,
 	makeWall
 } from '../core/doc/factory.js';
-import { heightAt } from '../core/terrain/field.js';
+import { heightAt, type HeightField } from '../core/terrain/field.js';
+import { groundUnder } from '../core/terrain/query.js';
 import { SetNodes } from '../core/cmd/edits.js';
 import { newNodeId } from '../core/doc/doc.js';
 import { rngFor } from '../core/rng.js';
@@ -83,6 +84,11 @@ const parseNum = (s: string): number | null => {
 const fmt = (n: number, dp: number): string => n.toFixed(dp).replace('.', ',');
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+function defaultFloor(field: HeightField | null, ring: readonly Vec2[]): number {
+	if (!field || ring.length < 3) return 0;
+	return round2(groundUnder(field, ring).max);
+}
 
 /** Draft state is a reactive proxy; the document must only ever hold plain data. */
 const plain = <T>(value: T): T => $state.snapshot(value) as T;
@@ -564,6 +570,9 @@ export class PlanController {
 				walls.push(makeWall(a, b, app.wallThickness, app.wallHeight));
 			}
 			if (walls.length === 0) return;
+			// A suterrang house sits at the high side, so the uphill wall shows no base at all.
+			const floor = defaultFloor(app.field, d.pts);
+			if (floor !== 0) for (const w of walls) w.floor = floor;
 			app.history.run(new AddEntities(walls, 'Vägg'));
 			app.select(walls.map((w) => w.id));
 		});

@@ -22,7 +22,7 @@ import {
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildRoof } from '../core/building/roof.js';
 import { placements } from '../core/building/openings.js';
-import { wallSolid } from '../core/building/wallgraph.js';
+import { wallParts } from '../core/building/wallgraph.js';
 import { docBounds } from '../core/doc/doc.js';
 import { lineStyle } from '../core/doc/materials.js';
 import type { Doc, Entity, EntityId, LineEntity, PlantEntity, PropEntity } from '../core/doc/types.js';
@@ -523,23 +523,29 @@ function addPickets(
 	for (const p of parts) p.dispose();
 }
 
-function buildWalls(doc: Doc): Object3D {
+function buildWalls(doc: Doc, field: HeightField | null): Object3D {
 	const group = new Group();
 	group.name = 'walls';
 	for (const e of doc.entities) {
 		if (e.k !== 'wall') continue;
-		const solid = wallSolid(doc, e);
-		if (solid.indices.length === 0) continue;
-		const mesh = new Mesh(solidToGeometry(solid), colourMaterial('#d9d3c6', { rough: 0.95 }));
-		mesh.castShadow = true;
-		mesh.receiveShadow = true;
-		tagEntity(mesh, e.id);
-		group.add(mesh);
+		const parts = wallParts(doc, e, field);
+		// The base storey takes the foundation colour, so a suterrang wall reads as a base and not as a very tall wall.
+		for (const [solid, colour] of [
+			[parts.storey, '#d9d3c6'],
+			[parts.base, '#b9b3a8']
+		] as const) {
+			if (solid.indices.length === 0) continue;
+			const mesh = new Mesh(solidToGeometry(solid), colourMaterial(colour, { rough: 0.95 }));
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
+			tagEntity(mesh, e.id);
+			group.add(mesh);
+		}
 
 		for (const p of placements(doc, e)) {
 			const glass = new Mesh(unitPlane.clone(), glassMaterial());
 			glass.scale.set(p.width, p.height, 1);
-			glass.position.set(p.centre.x, p.sill + p.height / 2, -p.centre.y);
+			glass.position.set(p.centre.x, parts.floor + p.sill + p.height / 2, -p.centre.y);
 			glass.rotation.y = Math.atan2(p.normal.x, -p.normal.y);
 			glass.userData.entityId = e.id;
 			if (p.type === 'window') group.add(glass);
@@ -699,7 +705,7 @@ export function buildScene(ctx: BuildContext): SceneParts {
 
 	const structures = new Group();
 	structures.name = 'structures';
-	structures.add(buildWalls(ctx.doc), buildRoofs(ctx.doc));
+	structures.add(buildWalls(ctx.doc, ctx.field), buildRoofs(ctx.doc));
 	for (const e of ctx.doc.entities) {
 		if (!visible(ctx.doc, e)) continue;
 		if (e.k === 'line') {

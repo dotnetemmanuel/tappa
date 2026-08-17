@@ -17,6 +17,8 @@ import {
 	sub,
 	type Vec2
 } from '../geom/vec2.js';
+import { groundUnder } from '../terrain/query.js';
+import type { HeightField } from '../terrain/field.js';
 import { emptySolid, mergeSolids, pushVertex, type Solid } from './solid.js';
 
 /** A closed run of walls, in order, with the node ids it passes through. */
@@ -131,29 +133,53 @@ export function wallQuad(doc: Doc, wall: WallEntity): Vec2[] | null {
 	];
 }
 
-/** Solid for one wall, with its openings cut out as holes in the wall face. */
-export function wallSolid(doc: Doc, wall: WallEntity): Solid {
+/** Foundation depth below the lowest ground the wall stands on, so no gap can open under it. */
+const FOOTING = 0.2;
+
+/**
+ * A wall in two pieces: the storey above the finished floor, and the base below it
+ * that reaches the ground. On flat ground the base is empty and the storey is exactly
+ * what this returned before terrain existed.
+ */
+export type WallParts = { storey: Solid; base: Solid; floor: number; foot: number };
+
+export function wallParts(doc: Doc, wall: WallEntity, field?: HeightField | null): WallParts {
 	const quad = wallQuad(doc, wall);
 	const a = doc.nodes[wall.a];
 	const b = doc.nodes[wall.b];
-	if (!quad || !a || !b) return emptySolid();
-	const height = Math.max(wall.height, 1e-3);
+	const floor = wall.floor ?? 0;
+	const top = floor + Math.max(wall.height, 1e-3);
+	if (!quad || !a || !b) return { storey: emptySolid(), base: emptySolid(), floor, foot: floor };
+	// Flat to the lowest ground it covers: the buried part is never seen, and this stays one prism.
+	const foot = field ? groundUnder(field, quad).min - FOOTING : floor;
 	const u = norm(sub(b, a));
 	const length = dist(a, b);
-	const parts: Solid[] = [
-		faceSolid(quad, [], (p) => [p.x, 0, -p.y], true),
-		faceSolid(quad, [], (p) => [p.x, height, -p.y])
-	];
-	for (let i = 0; i < quad.length; i++) {
-		const p0 = quad[i];
-		const p1 = quad[(i + 1) % quad.length];
-		const long = i % 2 === 0;
-		const holes = long
-			? openingHoles(wall, height, length, dot(sub(p0, a), u), dot(sub(p1, a), u))
-			: [];
-		parts.push(sideFace(p0, p1, 0, height, holes));
-	}
-	return mergeSolids(parts);
+
+	const slab = (from: number, to: number): Solid => {
+		if (to - from < 1e-6) return emptySolid();
+		const parts: Solid[] = [
+			faceSolid(quad, [], (p) => [p.x, from, -p.y], true),
+			faceSolid(quad, [], (p) => [p.x, to, -p.y])
+		];
+		for (let i = 0; i < quad.length; i++) {
+			const p0 = quad[i];
+			const p1 = quad[(i + 1) % quad.length];
+			const long = i % 2 === 0;
+			const holes = long
+				? openingHoles(wall, from, to, length, dot(sub(p0, a), u), dot(sub(p1, a), u))
+				: [];
+			parts.push(sideFace(p0, p1, from, to, holes));
+		}
+		return mergeSolids(parts);
+	};
+
+	return { storey: slab(floor, top), base: slab(foot, floor), floor, foot };
+}
+
+/** Solid for one wall, with its openings cut out as holes in the wall face. */
+export function wallSolid(doc: Doc, wall: WallEntity, field?: HeightField | null): Solid {
+	const parts = wallParts(doc, wall, field);
+	return mergeSolids([parts.storey, parts.base]);
 }
 
 /** Floor slab for a closed loop, at `elev`, triangulated with earcut. */
@@ -297,7 +323,8 @@ function sideFace(
 /** Openings as clockwise holes in a side face frame, dropped when they do not fit. */
 function openingHoles(
 	wall: WallEntity,
-	height: number,
+	from: number,
+	to: number,
 	length: number,
 	u0: number,
 	u1: number
@@ -314,8 +341,9 @@ function openingHoles(
 		const ends = [(centre - o.width / 2 - u0) * dir, (centre + o.width / 2 - u0) * dir];
 		const lo = Math.max(margin, Math.min(ends[0], ends[1]));
 		const hi = Math.min(faceLen - margin, Math.max(ends[0], ends[1]));
-		const y0 = Math.max(margin, o.sill);
-		const y1 = Math.min(height - margin, o.sill + o.height);
+		const floor = wall.floor ?? 0;
+		const y0 = Math.max(from + margin, floor + o.sill);
+		const y1 = Math.min(to - margin, floor + o.sill + o.height);
 		if (hi - lo < margin || y1 - y0 < margin) continue;
 		out.push([
 			{ x: lo, y: y0 },

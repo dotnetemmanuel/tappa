@@ -3,8 +3,12 @@ import { dist, type Vec2 } from '../geom/vec2.js';
 import { speciesOr } from '../plants/catalog.js';
 import { sizeAt } from '../plants/growth.js';
 import { hoursAt, type ShadowGrid } from '../sun/shadow.js';
+import { wallLoops } from '../building/wallgraph.js';
+import { centroid } from '../geom/polygon.js';
+import type { HeightField } from '../terrain/field.js';
+import { groundUnder } from '../terrain/query.js';
 
-export type CheckKind = 'spacing' | 'sun' | 'zone';
+export type CheckKind = 'spacing' | 'sun' | 'zone' | 'ground';
 
 export type Check = {
 	entity: EntityId;
@@ -25,7 +29,12 @@ export type CheckOptions = {
 	zone?: number;
 	/** How much canopy overlap is tolerated before it counts, 0 to 1. */
 	tolerance?: number;
+	/** The baked ground, so a house standing too proud of it can be flagged. */
+	field?: HeightField | null;
 };
+
+/** Above this the house is probably sitting at the wrong height rather than on a real plinth. */
+const DEEP_BASE = 3;
 
 const SUN_NEEDS: Record<'full' | 'part' | 'shade', { min: number; max: number; sv: string }> = {
 	full: { min: 5, max: 24, sv: 'full sol' },
@@ -92,6 +101,23 @@ export function runChecks(doc: Doc, o: CheckOptions): Check[] {
 					message: `${sp.sv} vill ha ${need.sv}, står i ${fmt(hours)} h sol`
 				});
 			}
+		}
+	}
+
+	if (o.field) {
+		for (const loop of wallLoops(doc)) {
+			const floor = loop.walls[0].floor ?? 0;
+			const ground = groundUnder(o.field, loop.ring);
+			const exposed = floor - ground.min;
+			if (exposed <= DEEP_BASE) continue;
+			const c = centroid(loop.ring);
+			out.push({
+				entity: loop.walls[0].id,
+				kind: 'ground',
+				at: c,
+				radius: 1,
+				message: `Huset står ${fmt(exposed)} m över marken på lågsidan, stämmer golvnivån?`
+			});
 		}
 	}
 

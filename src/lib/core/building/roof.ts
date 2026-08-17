@@ -156,7 +156,8 @@ function eaveHeightOf(doc: Doc, roof: RoofEntity): number {
 	let tallest = 0;
 	for (const id of roof.over) {
 		const e = findEntity(doc, id);
-		if (e && e.k === 'wall') tallest = Math.max(tallest, e.height);
+		// The eave rides on the finished floor, so raising a house takes its roof with it.
+		if (e && e.k === 'wall') tallest = Math.max(tallest, (e.floor ?? 0) + e.height);
 	}
 	return tallest > 0 ? tallest : DEFAULT_EAVE;
 }
