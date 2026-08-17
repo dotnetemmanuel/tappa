@@ -48,6 +48,51 @@ export function groundUnder(f: HeightField | null, ring: readonly Vec2[]): Groun
 	return { min, max };
 }
 
+/** Where the ground under a footprint is at its lowest, which is the corner a base storey shows. */
+export function lowestUnder(f: HeightField | null, ring: readonly Vec2[]): { at: Vec2; z: number } {
+	const centre = ring.length
+		? ring.reduce((a, p) => ({ x: a.x + p.x / ring.length, y: a.y + p.y / ring.length }), {
+				x: 0,
+				y: 0
+			})
+		: { x: 0, y: 0 };
+	if (!f || ring.length === 0) return { at: centre, z: 0 };
+	let at = centre;
+	let z = Infinity;
+	const take = (x: number, y: number): void => {
+		const h = heightAt(f, x, y);
+		if (h < z) {
+			z = h;
+			at = { x, y };
+		}
+	};
+	let minX = Infinity;
+	let minY = Infinity;
+	let maxX = -Infinity;
+	let maxY = -Infinity;
+	for (let i = 0; i < ring.length; i++) {
+		const a = ring[i];
+		const b = ring[(i + 1) % ring.length];
+		take(a.x, a.y);
+		if (a.x < minX) minX = a.x;
+		if (a.y < minY) minY = a.y;
+		if (a.x > maxX) maxX = a.x;
+		if (a.y > maxY) maxY = a.y;
+		const steps = Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / f.cell);
+		for (let s = 1; s < steps; s++) {
+			take(a.x + ((b.x - a.x) * s) / steps, a.y + ((b.y - a.y) * s) / steps);
+		}
+	}
+	for (let j = Math.ceil((minY - f.y0) / f.cell); j <= Math.floor((maxY - f.y0) / f.cell); j++) {
+		const y = f.y0 + j * f.cell;
+		for (let i = Math.ceil((minX - f.x0) / f.cell); i <= Math.floor((maxX - f.x0) / f.cell); i++) {
+			const x = f.x0 + i * f.cell;
+			if (pointInRing({ x, y }, ring)) take(x, y);
+		}
+	}
+	return { at, z: Number.isFinite(z) ? z : 0 };
+}
+
 export type ProfileSample = { at: Vec2; z: number };
 
 /** Ground heights along a run, every vertex kept and no gap longer than `step`. */

@@ -84,8 +84,8 @@ const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > 
  * The ground between the height points, by moving least squares: at each cell a plane is
  * fitted through all the points, weighted by one over distance to the fourth, which makes
  * it pass exactly through every point and reproduce a plane exactly from three of them.
- * The weighting is what keeps an edit local: a point holds the ground where it stands, so
- * raising one part of the slope leaves the rest of it where the other points pin it.
+ * Weighting alone does not make an edit local on a plot with a handful of points, so the
+ * side view pins the ground either side of a drag; see `edit.ts`.
  */
 function fillBase(f: HeightField, spots: readonly Spot[]): void {
 	if (spots.length === 0) return;

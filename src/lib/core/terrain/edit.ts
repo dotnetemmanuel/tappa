@@ -4,6 +4,7 @@ import type { Doc, EntityId, SpotEntity } from '../doc/types.js';
 import { centroid } from '../geom/polygon.js';
 import type { Vec2 } from '../geom/vec2.js';
 import { heightAt, type HeightField } from './field.js';
+import { lowestUnder } from './query.js';
 import { handleAt, sectionPoint, sectionVertices, slopeHandles, tiltFactor, uOf } from './section.js';
 import type { Facing } from './section.js';
 
@@ -35,6 +36,14 @@ export type GroundMove = {
 /** How near a press has to be, in metres, to take hold of a height point already there. */
 const SNAP = 1.5;
 
+/**
+ * How far either side of a drag the ground gets pinned, in metres. Without pins a plot with a
+ * handful of points has nothing local about it: every point is roughly as far from the query as
+ * every other, so dragging one re-tilts the whole fit. A pin either side bounds the change the
+ * way moving one vertex of a polyline only bends the two spans beside it.
+ */
+const PIN_GAP = 5;
+
 export function groundEdit(
 	doc: Doc,
 	field: HeightField | null,
@@ -48,12 +57,13 @@ export function groundEdit(
 
 /** Nothing else in the document moves: one height point does, and the ground follows it. */
 function pointEdit(doc: Doc, field: HeightField | null, facing: Facing, u: number): GroundEdit {
+	const create = pins(doc, field, facing, u);
 	const near = nearestVertex(doc, facing, u);
 	// Digging one spot leaves every house at the level it was given: the base storey grows instead.
 	if (near) {
 		const z = near.z;
 		return {
-			create: [],
+			create,
 			startZ: z,
 			apply: (dz) => ({ spots: [{ id: near.id, z: round(z + dz) }], floors: [] })
 		};
@@ -61,11 +71,28 @@ function pointEdit(doc: Doc, field: HeightField | null, facing: Facing, u: numbe
 	const at = sectionPoint(doc, facing, u);
 	const z = round(heightAt(field, at.x, at.y));
 	const spot = makeSpotAt(at, z);
+	create.push(spot);
 	return {
-		create: [spot],
+		create,
 		startZ: z,
 		apply: (dz) => ({ spots: [{ id: spot.id, z: round(z + dz) }], floors: [] })
 	};
+}
+
+/** Height points either side of a drag, at the ground as it stands, so the change stays put. */
+function pins(doc: Doc, field: HeightField | null, facing: Facing, u: number): SpotEntity[] {
+	const out: SpotEntity[] = [];
+	const here = sectionVertices(doc, facing);
+	for (const side of [-1, 1]) {
+		const has = here.some((v) => {
+			const gap = (v.u - u) * side;
+			return gap > 0 && gap <= PIN_GAP + 1e-6;
+		});
+		if (has) continue;
+		const at = sectionPoint(doc, facing, u + side * PIN_GAP);
+		out.push(makeSpotAt(at, round(heightAt(field, at.x, at.y))));
+	}
+	return out;
 }
 
 /**
@@ -105,7 +132,7 @@ function tiltEdit(
 	].map((e) => ({ id: e.id, z: e.z, t: tiltFactor(facing, grabU, pivotU, e.at) }));
 
 	// Tilting turns the whole plot, so a house turns with it and keeps sitting the way it sat.
-	const houses = houseRamps(doc, facing, grabU, pivotU);
+	const houses = houseRamps(doc, field, facing, grabU, pivotU);
 
 	return {
 		create,
@@ -117,9 +144,14 @@ function tiltEdit(
 	};
 }
 
-/** Every wall, with the share of a tilt its own house takes, so one house keeps one floor. */
+/**
+ * Every wall, with the share of a tilt its own house takes, so one house keeps one floor.
+ * The share is read at the lowest ground the house covers, because that is the corner its
+ * base storey shows: anchoring there keeps the visible base the same height through a tilt.
+ */
 function houseRamps(
 	doc: Doc,
+	field: HeightField | null,
 	facing: Facing,
 	grabU: number,
 	pivotU: number
@@ -127,7 +159,8 @@ function houseRamps(
 	const out: { id: EntityId; floor: number; t: number }[] = [];
 	const done = new Set<EntityId>();
 	for (const loop of wallLoops(doc)) {
-		const t = tiltFactor(facing, grabU, pivotU, centroid(loop.ring));
+		const anchor = field ? lowestUnder(field, loop.ring).at : centroid(loop.ring);
+		const t = tiltFactor(facing, grabU, pivotU, anchor);
 		for (const w of loop.walls) {
 			if (done.has(w.id)) continue;
 			done.add(w.id);

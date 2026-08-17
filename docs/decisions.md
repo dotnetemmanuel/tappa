@@ -114,3 +114,11 @@ Both are pure and tested; the Svelte view only turns pointer events into calls a
 Dragging an end turns the whole plot, so a house rides along and keeps sitting the way it sat, one floor level for the whole loop.
 Dragging any other point leaves the house at its level, so digging out or banking up against it grows the base storey, which is the whole point of a suterrang plan.
 
+## A drag pins the ground either side of itself
+With a handful of height points spread over a plot, nothing is local: every point is roughly as far from a query as every other, so dragging one re-tilted the whole fit and a dig nine metres away moved the ground under the house by 0.6 m.
+Dropping a pin five metres either side first cuts that to two centimetres, and it matches how moving one vertex of a polyline only bends the two spans beside it.
+
+## A tilted house is anchored to the lowest ground it covers
+The floor used to ride the ramp at the middle of the footprint, so a tilt dropped the low corner further than the floor and the base storey grew a plinth.
+Reading the ramp at the lowest ground under the house keeps the visible base the same height through a tilt, which is what a rigid house on a turning plot can promise.
+

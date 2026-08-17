@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createDoc } from '../doc/doc.js';
 import { makeSpot, makeWall } from '../doc/factory.js';
 import type { Doc, SpotEntity } from '../doc/types.js';
+import { wallLoops } from '../building/wallgraph.js';
 import { buildField } from './field.js';
+import { groundUnder } from './query.js';
 import { groundEdit } from './edit.js';
 import { handleAt, slopeHandles } from './section.js';
 
@@ -85,24 +87,34 @@ describe('dragging one point on the ground line', () => {
 		}
 	});
 
-	it('adds one height point the first time, and reuses it after that', () => {
+	it('drops the point you grabbed and a pin either side of it', () => {
 		const doc = plot();
 		const first = groundEdit(doc, buildField(doc), 's', { kind: 'point', u: 12 });
-		expect(first.create).toHaveLength(1);
+		expect(first.create).toHaveLength(3);
+		// Only the one you grabbed moves; the pins hold the ground where it already was.
 		drag(doc, first, -0.5);
+		expect(first.apply(-0.5).spots).toHaveLength(1);
+	});
+
+	it('reuses what is already there on the second drag', () => {
+		const doc = plot();
+		const first = groundEdit(doc, buildField(doc), 's', { kind: 'point', u: 12 });
+		drag(doc, first, -0.5);
+		const count = spots(doc).length;
 		const again = groundEdit(doc, buildField(doc), 's', { kind: 'point', u: 12 });
 		expect(again.create).toHaveLength(0);
 		drag(doc, again, -0.5);
-		expect(spots(doc)).toHaveLength(4);
+		expect(spots(doc)).toHaveLength(count);
 		expect(handleAt(doc, buildField(doc), 's', 12).z).toBeCloseTo(first.startZ - 1, 2);
 	});
 
 	it('takes hold of a point a little to the side rather than crowding a new one next to it', () => {
 		const doc = plot();
-		doc.entities.push(makeSpot({ x: 12, y: 10 }, -1.2));
+		const near = makeSpot({ x: 12, y: 10 }, -1.2);
+		doc.entities.push(near);
 		const edit = groundEdit(doc, buildField(doc), 's', { kind: 'point', u: 12.8 });
-		expect(edit.create).toHaveLength(0);
 		expect(edit.startZ).toBeCloseTo(-1.2, 6);
+		expect(edit.apply(-1).spots).toEqual([{ id: near.id, z: -2.2 }]);
 	});
 
 	it('barely disturbs the far side of the plot', () => {
@@ -135,17 +147,11 @@ describe('dragging an end to tilt the plot', () => {
 
 	it('takes the house with it, so it keeps sitting the way it sat', () => {
 		const doc = withHouse(plot());
-		const field = buildField(doc);
-		const under = handleAt(doc, field, 's', 7).z;
-		const floor = 0.2;
-		drag(doc, groundEdit(doc, field, 's', { kind: 'tilt', side: 'left' }), 1.5);
-		const after = buildField(doc);
+		drag(doc, groundEdit(doc, buildField(doc), 's', { kind: 'tilt', side: 'left' }), 1.5);
 		const walls = doc.entities.filter((e) => e.k === 'wall');
-		// Every wall of the house keeps one floor level, and it moved with the ground beneath it.
-		const levels = new Set(walls.map((w) => w.floor));
-		expect(levels.size).toBe(1);
-		const rose = (walls[0].floor ?? 0) - floor;
-		expect(rose).toBeCloseTo(handleAt(doc, after, 's', 7).z - under, 1);
+		// One floor level for the whole house, and it rose with the ground it stands on.
+		expect(new Set(walls.map((w) => w.floor)).size).toBe(1);
+		expect(walls[0].floor ?? 0).toBeGreaterThan(0.2);
 	});
 
 	it('holds the house at one floor level even when the ramp runs across it', () => {
@@ -182,5 +188,43 @@ describe('dragging an end to tilt the plot', () => {
 		doc.entities.push(...edit.create);
 		for (const dz of [-0.4, -1.2, -2, -1, 0]) apply(doc, edit, dz);
 		expect(spots(doc).slice(0, before.length).map((e) => e.z)).toEqual(before);
+	});
+});
+
+/** How far the house stands proud of the ground on its low side, which is what you see. */
+function exposedBase(doc: Doc): number {
+	const field = buildField(doc);
+	const loop = wallLoops(doc)[0];
+	const floor = loop.walls[0].floor ?? 0;
+	return floor - groundUnder(field, loop.ring).min;
+}
+
+describe('what a drag does to the house you can see', () => {
+	it('keeps the base storey the same height through a tilt', () => {
+		const doc = withHouse(plot());
+		const before = exposedBase(doc);
+		drag(doc, groundEdit(doc, buildField(doc), 's', { kind: 'tilt', side: 'right' }), -2);
+		expect(exposedBase(doc)).toBeCloseTo(before, 1);
+	});
+
+	it('keeps it through a tilt the other way as well', () => {
+		const doc = withHouse(plot());
+		const before = exposedBase(doc);
+		drag(doc, groundEdit(doc, buildField(doc), 's', { kind: 'tilt', side: 'left' }), 1.5);
+		expect(exposedBase(doc)).toBeCloseTo(before, 1);
+	});
+
+	it('grows the base storey when you dig the ground under the house', () => {
+		const doc = withHouse(plot());
+		const before = exposedBase(doc);
+		drag(doc, groundEdit(doc, buildField(doc), 's', { kind: 'point', u: 7 }), -1);
+		expect(exposedBase(doc)).toBeGreaterThan(before + 0.4);
+	});
+
+	it('leaves the base storey alone when you dig well away from the house', () => {
+		const doc = withHouse(plot());
+		const before = exposedBase(doc);
+		drag(doc, groundEdit(doc, buildField(doc), 's', { kind: 'point', u: 19 }), -1.5);
+		expect(exposedBase(doc)).toBeCloseTo(before, 1);
 	});
 });
