@@ -1,6 +1,6 @@
 import type { Vec2 } from '../geom/vec2.js';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type EntityId = string;
 export type LayerId = string;
@@ -61,12 +61,23 @@ type Base = {
 	name?: string;
 };
 
+/** How a levelled area meets the ground around it. */
+export type Grade = {
+	level: number;
+	edge: 'bank' | 'wall';
+	/** Metres of run the bank takes to reach the surrounding ground. Ignored by a hard edge. */
+	run: number;
+	mat?: MaterialId;
+};
+
 export type AreaEntity = Base & {
 	k: 'area';
 	mat: SurfaceMat;
 	ring: Vec2[];
 	holes?: Vec2[][];
+	/** Lift above the ground it is laid on, for stacking. `grade` moves the ground itself. */
 	elev?: number;
+	grade?: Grade;
 };
 
 export type PathEntity = Base & {
@@ -92,6 +103,8 @@ export type WallEntity = Base & {
 	thickness: number;
 	height: number;
 	openings: Opening[];
+	/** Finished floor height. One value per house, written to every wall in the run. */
+	floor?: number;
 };
 
 export type RoofEntity = Base & {
@@ -139,6 +152,13 @@ export type DimEntity = Base & {
 	text?: string;
 };
 
+export type SpotEntity = Base & {
+	k: 'spot';
+	at: Vec2;
+	/** Ground height in metres, plus up, relative to the project datum. */
+	z: number;
+};
+
 export type LabelEntity = Base & {
 	k: 'label';
 	at: Vec2;
@@ -157,7 +177,8 @@ export type Entity =
 	| PropEntity
 	| ImageEntity
 	| DimEntity
-	| LabelEntity;
+	| LabelEntity
+	| SpotEntity;
 
 export type EntityKind = Entity['k'];
 
@@ -178,6 +199,8 @@ export type DocMeta = {
 	modified: string;
 	lat: number;
 	lon: number;
+	/** Contour interval in metres for the plan view. */
+	contour: number;
 	/** Degrees to rotate plan north away from +y, for a plot that is not square to north. */
 	northOffset: number;
 };
@@ -201,3 +224,4 @@ export const isPlant = (e: Entity): e is PlantEntity => e.k === 'plant';
 export const isImage = (e: Entity): e is ImageEntity => e.k === 'image';
 export const isDim = (e: Entity): e is DimEntity => e.k === 'dim';
 export const isLabel = (e: Entity): e is LabelEntity => e.k === 'label';
+export const isSpot = (e: Entity): e is SpotEntity => e.k === 'spot';

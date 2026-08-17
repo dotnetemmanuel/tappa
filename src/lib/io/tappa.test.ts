@@ -1,7 +1,7 @@
 import { strToU8, unzipSync, zipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import { createDoc } from '../core/doc/doc.js';
-import type { AssetRef, Doc } from '../core/doc/types.js';
+import { SCHEMA_VERSION, type AssetRef, type Doc } from '../core/doc/types.js';
 import { packTappa, suggestFilename, unpackTappa, TAPPA_MIME, type AssetBlob } from './tappa.js';
 
 const PNG = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
@@ -180,7 +180,7 @@ describe('packTappa and unpackTappa', () => {
 	it('writes project.json with tab indentation', () => {
 		const zip = packTappa(createDoc('Täppan'), []);
 		const text = new TextDecoder().decode(entryOf(zip, 'project.json'));
-		expect(text).toContain('\n\t"schema": 1');
+		expect(text).toContain(`\n\t"schema": ${SCHEMA_VERSION}`);
 	});
 
 	it('carries several assets with the right file extensions', () => {

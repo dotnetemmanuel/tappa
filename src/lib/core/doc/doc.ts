@@ -25,6 +25,7 @@ import {
 
 export const DEFAULT_LAYERS: readonly Layer[] = [
 	{ id: 'underlay', name: 'Underlag', visible: true, locked: true },
+	{ id: 'ground', name: 'Marknivåer', visible: true, locked: false },
 	{ id: 'surfaces', name: 'Ytor', visible: true, locked: false },
 	{ id: 'structures', name: 'Byggnader', visible: true, locked: false },
 	{ id: 'planting', name: 'Växter', visible: true, locked: false },
@@ -35,7 +36,7 @@ export function createDoc(name = 'Namnlös täppa'): Doc {
 	const now = new Date().toISOString();
 	return {
 		schema: SCHEMA_VERSION,
-		meta: { name, created: now, modified: now, lat: 59.4, lon: 17.9, northOffset: 0 },
+		meta: { name, created: now, modified: now, lat: 59.4, lon: 17.9, contour: 0.25, northOffset: 0 },
 		plot: { boundary: [] },
 		layers: DEFAULT_LAYERS.map((l) => ({ ...l })),
 		nodes: {},
@@ -90,6 +91,7 @@ export function entityVertices(doc: Doc, e: Entity): Vec2[] {
 		case 'plant':
 		case 'prop':
 		case 'label':
+		case 'spot':
 			return [e.at];
 		case 'image':
 			return imageCorners(e.transform, assetSize(doc, e.asset));
@@ -158,6 +160,8 @@ export function entityBounds(doc: Doc, e: Entity): Rect {
 			return rectExpand(rectFromPoints([e.at]), 1 * (e.scale ?? 1));
 		case 'label':
 			return rectExpand(rectFromPoints([e.at]), e.size * Math.max(2, e.text.length * 0.4));
+		case 'spot':
+			return rectExpand(rectFromPoints([e.at]), 0.3);
 		case 'roof': {
 			let r = emptyRect();
 			for (const id of e.over) {
@@ -233,6 +237,7 @@ export function translateEntity(e: Entity, by: Vec2): Entity {
 		case 'plant':
 		case 'prop':
 		case 'label':
+		case 'spot':
 			return { ...e, at: m(e.at) };
 		case 'image':
 			return { ...e, transform: { ...e.transform, at: m(e.transform.at) } };
@@ -262,6 +267,8 @@ export function rotateEntity(e: Entity, pivot: Vec2, rad: number): Entity {
 			return { ...e, at: m(e.at), rot: e.rot + rad };
 		case 'label':
 			return { ...e, at: m(e.at), rot: (e.rot ?? 0) + rad };
+		case 'spot':
+			return { ...e, at: m(e.at) };
 		case 'image':
 			return {
 				...e,
@@ -291,6 +298,7 @@ export function setVertex(e: Entity, i: number, at: Vec2): Entity {
 		case 'plant':
 		case 'prop':
 		case 'label':
+		case 'spot':
 			return i === 0 ? { ...e, at } : e;
 		case 'image':
 			return e;

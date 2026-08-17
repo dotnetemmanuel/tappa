@@ -33,6 +33,7 @@ function makeDoc(p: {
 			modified: '2026-01-01T00:00:00.000Z',
 			lat: 59.4,
 			lon: 17.9,
+			contour: 0.25,
 			northOffset: 0
 		},
 		plot: { boundary: p.boundary ?? [] },

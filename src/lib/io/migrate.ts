@@ -7,11 +7,15 @@ type Bag = Record<string, unknown>;
 type Step = (doc: Bag) => Bag;
 
 /** Step n turns a schema n document into a schema n+1 one, so schema 2 is one entry here. */
-const STEPS: ReadonlyMap<number, Step> = new Map<number, Step>();
+const STEPS: ReadonlyMap<number, Step> = new Map<number, Step>([
+	// Everything schema 2 added is optional, so `withDefaults` fills the rest.
+	[1, (doc) => ({ ...doc, schema: 2 })]
+]);
 
 /** Missing a kind here is a compile error, so a new entity type cannot be forgotten. */
 const KINDS: Readonly<Record<EntityKind, true>> = {
 	area: true,
+	spot: true,
 	path: true,
 	line: true,
 	wall: true,
@@ -57,6 +61,7 @@ export function validateDoc(raw: unknown): asserts raw is Doc {
 	expectNumber(meta.lat, 'meta.lat');
 	expectNumber(meta.lon, 'meta.lon');
 	expectNumber(meta.northOffset, 'meta.northOffset');
+	expectNumber(meta.contour, 'meta.contour');
 
 	const plot = expectBag(doc.plot, 'plot');
 	expectPoints(plot.boundary, 'plot.boundary');
@@ -84,6 +89,14 @@ export function validateDoc(raw: unknown): asserts raw is Doc {
 		const kind = entity.k;
 		if (typeof kind !== 'string') throw new Error(`Objektet ${where} saknar en typ (k).`);
 		if (!(kind in KINDS)) throw new Error(`Objektet ${where} har okänd typ "${kind}".`);
+		if (kind === 'spot') {
+			expectPoint(entity.at, `${where}.at`);
+			expectNumber(entity.z, `${where}.z`);
+		}
+		if (isBag(entity.grade)) {
+			expectNumber(entity.grade.level, `${where}.grade.level`);
+			expectNumber(entity.grade.run, `${where}.grade.run`);
+		}
 	});
 
 	const assets = expectArray(doc.assets, 'assets');
@@ -103,13 +116,27 @@ function withDefaults(bag: Bag): Bag {
 	if (isBag(meta) && meta.modified === undefined && typeof meta.created === 'string') {
 		meta.modified = meta.created;
 	}
+	if (isBag(meta) && meta.contour === undefined) meta.contour = 0.25;
 	return {
 		...bag,
 		meta,
-		layers: bag.layers === undefined ? DEFAULT_LAYERS.map((l) => ({ ...l })) : bag.layers,
+		layers:
+			bag.layers === undefined ? DEFAULT_LAYERS.map((l) => ({ ...l })) : withGroundLayer(bag.layers),
 		nodes: bag.nodes === undefined ? {} : bag.nodes,
 		assets: bag.assets === undefined ? [] : bag.assets
 	};
+}
+
+/** A document drawn before terrain existed has no ground layer, and the height points need one. */
+function withGroundLayer(layers: unknown): unknown {
+	if (!Array.isArray(layers)) return layers;
+	if (layers.some((l) => isBag(l) && l.id === 'ground')) return layers;
+	const ground = DEFAULT_LAYERS.find((l) => l.id === 'ground');
+	if (!ground) return layers;
+	const after = layers.findIndex((l) => isBag(l) && l.id === 'underlay');
+	const out = [...layers];
+	out.splice(after + 1, 0, { ...ground });
+	return out;
 }
 
 function schemaOf(bag: Bag): number {

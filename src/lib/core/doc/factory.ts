@@ -17,6 +17,7 @@ import type {
 	PropId,
 	RoofEntity,
 	SpeciesId,
+	SpotEntity,
 	WallEntity
 } from './types.js';
 
@@ -53,6 +54,10 @@ export function makeLine(
 
 export function makeDim(from: Anchor, to: Anchor, offset: number, layer = 'annotation'): DimEntity {
 	return { k: 'dim', id: nextId('dim'), layer, from, to, offset };
+}
+
+export function makeSpot(at: Vec2, z: number, layer = 'ground'): SpotEntity {
+	return { k: 'spot', id: nextId('spot'), layer, at, z };
 }
 
 export function makeLabel(at: Vec2, text: string, layer = 'annotation'): LabelEntity {

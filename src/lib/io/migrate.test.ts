@@ -57,6 +57,46 @@ describe('migrate', () => {
 		expect(() => migrate({ hello: 'world' })).toThrow(/schemanummer/);
 	});
 
+	it('lifts a schema 1 document to schema 2 without touching what it drew', () => {
+		const entities = [{ id: 'area-1', layer: 'surfaces', k: 'area', mat: { id: 'lawn' }, ring: [] }];
+		const raw = { ...minimal(), schema: 1, entities: structuredClone(entities) };
+		const migrated = migrate(raw);
+		expect(migrated.schema).toBe(2);
+		expect(migrated.meta.contour).toBe(0.25);
+		expect(migrated.layers.filter((l) => l.id === 'ground')).toHaveLength(1);
+		expect(migrated.entities).toEqual(entities);
+	});
+
+	it('does not add a second ground layer to a document that has one', () => {
+		const raw = {
+			...minimal(),
+			schema: 1,
+			layers: [{ id: 'ground', name: 'Egna marknivåer', visible: false, locked: true }]
+		};
+		const migrated = migrate(raw);
+		expect(migrated.layers.filter((l) => l.id === 'ground')).toHaveLength(1);
+		expect(migrated.layers[0].name).toBe('Egna marknivåer');
+	});
+
+	it('keeps a height point through validation', () => {
+		const raw = minimal();
+		raw.entities = [{ id: 'spot-1', layer: 'ground', k: 'spot', at: { x: 2, y: 3 }, z: -1.8 }];
+		expect(migrate(raw).entities[0]).toEqual({
+			id: 'spot-1',
+			layer: 'ground',
+			k: 'spot',
+			at: { x: 2, y: 3 },
+			z: -1.8
+		});
+	});
+
+	it('rejects a height point without a height', () => {
+		const raw = minimal();
+		raw.entities = [{ id: 'spot-1', layer: 'ground', k: 'spot', at: { x: 2, y: 3 }, z: 'högt' }];
+		expect(() => migrate(raw)).toThrow(/spot-1/);
+		expect(() => migrate(raw)).toThrow(/\.z/);
+	});
+
 	it('names the field that is wrong', () => {
 		const raw = minimal();
 		raw.meta = { name: 'Täppan', created: '2026-01-02', lat: 'norr', lon: 17.9, northOffset: 0 };

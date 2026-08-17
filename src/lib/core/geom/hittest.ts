@@ -37,7 +37,7 @@ export type PickOptions = {
 	only?: ReadonlySet<EntityId>;
 };
 
-const POINT_LIKE: ReadonlySet<EntityKind> = new Set<EntityKind>(['plant', 'prop', 'label']);
+const POINT_LIKE: ReadonlySet<EntityKind> = new Set<EntityKind>(['plant', 'prop', 'label', 'spot']);
 
 /** Two handles this close together are the same click, so draw order decides. */
 const NEAR_TIE = 1e-9;
