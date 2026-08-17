@@ -82,6 +82,35 @@ export function terrainMaterial(): MeshStandardMaterial {
 	return terrainMat;
 }
 
+let plantMat: MeshStandardMaterial | null = null;
+
+/** Plants carry their colours per vertex, so one material covers every species. */
+export function plantMaterial(): MeshStandardMaterial {
+	if (plantMat) return plantMat;
+	plantMat = new MeshStandardMaterial({
+		color: new Color('#ffffff'),
+		vertexColors: true,
+		roughness: 1,
+		metalness: 0
+	});
+	return plantMat;
+}
+
+let partMat: MeshStandardMaterial | null = null;
+
+/** Built objects: colour per vertex so parts separate, flat shaded so corners stay corners. */
+export function partMaterial(): MeshStandardMaterial {
+	if (partMat) return partMat;
+	partMat = new MeshStandardMaterial({
+		color: new Color('#ffffff'),
+		vertexColors: true,
+		flatShading: true,
+		roughness: 0.85,
+		metalness: 0
+	});
+	return partMat;
+}
+
 export function glassMaterial(): MeshStandardMaterial {
 	return colourMaterial('#8fb3c4', { rough: 0.15 });
 }

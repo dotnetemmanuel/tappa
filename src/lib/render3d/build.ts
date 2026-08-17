@@ -31,13 +31,20 @@ import type { Vec2 } from '../core/geom/vec2.js';
 import { speciesOr } from '../core/plants/catalog.js';
 import { seasonOf, sizeAt } from '../core/plants/growth.js';
 import { plantForm } from '../core/plants/archetypes.js';
-import type { Mass, PlantForm } from '../core/plants/types.js';
+import type { Limb, Mass, PlantForm } from '../core/plants/types.js';
 import { formForProp } from '../core/props/builders.js';
-import type { Part } from '../core/props/types.js';
+import type { Part, PropForm } from '../core/props/types.js';
 import { contourLines } from '../core/terrain/contour.js';
 import { heightAt, type HeightField } from '../core/terrain/field.js';
 import { drape, groundUnder, profileAlong, type DrapedMesh } from '../core/terrain/query.js';
-import { colourMaterial, glassMaterial, surfaceMaterial, terrainMaterial } from './materials.js';
+import {
+	colourMaterial,
+	glassMaterial,
+	partMaterial,
+	plantMaterial,
+	surfaceMaterial,
+	terrainMaterial
+} from './materials.js';
 import { prismToGeometry, ribbonToGeometry, ringToGeometry, solidToGeometry } from './geometry.js';
 
 /** Surfaces are lifted a few millimetres apart so co-planar areas do not z-fight. */
@@ -54,8 +61,8 @@ export type BuildContext = {
 	texture: (assetId: string) => import('three').Texture | null;
 };
 
-const unitSphere = new SphereGeometry(0.5, 14, 10);
-const unitCone = new ConeGeometry(0.5, 1, 14);
+const unitSphere = new SphereGeometry(0.5, 10, 7);
+const unitCone = new ConeGeometry(0.5, 1, 10);
 const unitCylinder = new CylinderGeometry(0.5, 0.5, 1, 14);
 const unitBox = new BoxGeometry(1, 1, 1);
 const unitPlane = new PlaneGeometry(1, 1);
@@ -112,7 +119,9 @@ function mergeByColour(
 		const merged = g.parts.length === 1 ? g.parts[0] : mergeGeometries(g.parts, false);
 		if (!merged) continue;
 		merged.computeVertexNormals();
-		const mat = colourMaterial(g.colour, { rough: 0.85 });
+		// Built things have hard edges; smoothing them across a corner is what makes a box look soft.
+		const mat =
+			g.colour === 'vertex' ? partMaterial() : colourMaterial(g.colour, { rough: 0.85, flat: true });
 		const mesh = new Mesh(merged, g.opacity < 1 ? transparentOf(mat, g.opacity) : mat);
 		mesh.castShadow = true;
 		mesh.receiveShadow = true;
@@ -685,60 +694,128 @@ function bucketPlants(ctx: BuildContext): Map<string, PlantBucket> {
 	return buckets;
 }
 
+/** A limb as a tapered length of wood, which is what a trunk and a branch both are. */
+function limbGeometry(l: Limb): BufferGeometry {
+	const dx = l.b.x - l.a.x;
+	const dy = l.b.y - l.a.y;
+	const dz = l.b.z - l.a.z;
+	const len = Math.hypot(dx, dy, dz);
+	if (len < 1e-5) return new BufferGeometry();
+	const g = new CylinderGeometry(Math.max(l.rb, 0.0015), Math.max(l.ra, 0.0015), len, 6, 1, true);
+	g.translate(0, len / 2, 0);
+	const up = new Vector3(0, 1, 0);
+	const dir = new Vector3(dx, dy, dz).normalize();
+	g.applyQuaternion(new Quaternion().setFromUnitVectors(up, dir));
+	g.translate(l.a.x, l.a.y, l.a.z);
+	return g;
+}
+
+/** Every part of a plant in one geometry, its colour baked per vertex. */
+function plantGeometry(form: PlantForm): BufferGeometry | null {
+	const parts: BufferGeometry[] = [];
+	const colours: string[] = [];
+	for (const m of form.masses) {
+		parts.push(massGeometry(m));
+		colours.push(m.colour);
+	}
+	for (const l of form.limbs ?? []) {
+		const g = limbGeometry(l);
+		if (g.getAttribute('position')) {
+			parts.push(g);
+			colours.push(l.colour);
+		}
+	}
+	if (!form.limbs && form.trunk) {
+		const t = form.trunk;
+		for (const stem of t.stems) {
+			const g = unitCylinder.clone();
+			g.scale(t.radius * 2, t.height, t.radius * 2);
+			if (stem.lean) g.rotateZ(stem.lean);
+			g.translate(stem.x, t.height / 2, stem.z);
+			parts.push(g);
+			colours.push(t.colour);
+		}
+	}
+	if (parts.length === 0) return null;
+
+	// Per part colour has to ride on the vertices, or a canopy shaded clump by clump would
+	// need one mesh per shade and lose the instancing that keeps a thousand plants cheap.
+	const c = new Color();
+	parts.forEach((g, i) => {
+		const count = g.getAttribute('position').count;
+		const rgb = new Float32Array(count * 3);
+		c.set(colours[i]);
+		for (let v = 0; v < count; v++) {
+			rgb[v * 3] = c.r;
+			rgb[v * 3 + 1] = c.g;
+			rgb[v * 3 + 2] = c.b;
+		}
+		g.setAttribute('color', new BufferAttribute(rgb, 3));
+		if (!g.getAttribute('uv')) {
+			g.setAttribute('uv', new BufferAttribute(new Float32Array(count * 2), 2));
+		}
+	});
+	const merged = parts.length === 1 ? parts[0] : mergeGeometries(parts, false);
+	if (parts.length > 1) for (const p of parts) p.dispose();
+	if (!merged) return null;
+	merged.computeVertexNormals();
+	return merged;
+}
+
 function buildPlants(ctx: BuildContext): Object3D {
 	const group = new Group();
 	group.name = 'plants';
 	for (const bucket of bucketPlants(ctx).values()) {
 		if (bucket.matrices.length === 0) continue;
-		const byColour = new Map<string, BufferGeometry[]>();
-		for (const m of bucket.form.masses) {
-			const list = byColour.get(m.colour) ?? [];
-			list.push(massGeometry(m));
-			byColour.set(m.colour, list);
-		}
-		if (bucket.form.trunk) {
-			const t = bucket.form.trunk;
-			for (const stem of t.stems) {
-				const g = unitCylinder.clone();
-				g.scale(t.radius * 2, t.height, t.radius * 2);
-				if (stem.lean) g.rotateZ(stem.lean);
-				g.translate(stem.x, t.height / 2, stem.z);
-				const list = byColour.get(t.colour) ?? [];
-				list.push(g);
-				byColour.set(t.colour, list);
-			}
-		}
-
-		for (const [colour, parts] of byColour) {
-			const merged = parts.length === 1 ? parts[0] : mergeGeometries(parts, false);
-			if (!merged) continue;
-			merged.computeVertexNormals();
-			const inst = new InstancedMesh(
-				merged,
-				colourMaterial(colour, { rough: 1 }),
-				bucket.matrices.length
-			);
-			bucket.matrices.forEach((m, i) => inst.setMatrixAt(i, m));
-			inst.instanceMatrix.needsUpdate = true;
-			inst.castShadow = true;
-			inst.receiveShadow = true;
-			inst.userData.plantIds = bucket.ids;
-			inst.frustumCulled = false;
-			group.add(inst);
-			if (parts.length > 1) for (const p of parts) p.dispose();
-		}
+		const geometry = plantGeometry(bucket.form);
+		if (!geometry) continue;
+		const inst = new InstancedMesh(geometry, plantMaterial(), bucket.matrices.length);
+		bucket.matrices.forEach((m, i) => inst.setMatrixAt(i, m));
+		inst.instanceMatrix.needsUpdate = true;
+		inst.castShadow = true;
+		inst.receiveShadow = true;
+		inst.userData.plantIds = bucket.ids;
+		inst.frustumCulled = false;
+		group.add(inst);
 	}
 	return group;
 }
 
 // ------------------------------------------------------------------- props
 
+/**
+ * The same colour on two touching parts merges them into one silhouette, which is what makes
+ * a built object read as a lump. Each part gets a shade of its own and sits in a little of its
+ * own shadow near the ground, so slats, staves and legs stay separate.
+ */
+function shadeParts(form: PropForm): { colour: string; opacity?: number; geometry: BufferGeometry }[] {
+	const out: { colour: string; opacity?: number; geometry: BufferGeometry }[] = [];
+	const c = new Color();
+	form.parts.forEach((p, i) => {
+		const g = partGeometry(p);
+		const pos = g.getAttribute('position');
+		const rgb = new Float32Array(pos.count * 3);
+		c.set(p.colour);
+		// A deterministic nudge per part, plus a darker foot, which reads as contact shadow.
+		const jitter = (((i * 2654435761) % 1000) / 1000 - 0.5) * 0.07;
+		for (let v = 0; v < pos.count; v++) {
+			const y = pos.getY(v);
+			const foot = Math.max(0, 1 - Math.max(0, y) / 0.35) * 0.16;
+			const k = 1 + jitter - foot;
+			rgb[v * 3] = c.r * k;
+			rgb[v * 3 + 1] = c.g * k;
+			rgb[v * 3 + 2] = c.b * k;
+		}
+		g.setAttribute('color', new BufferAttribute(rgb, 3));
+		out.push({ colour: p.opacity !== undefined ? p.colour : 'vertex', opacity: p.opacity, geometry: g });
+	});
+	return out;
+}
+
 function buildProp(e: PropEntity, field: HeightField | null): Object3D | null {
 	const form = formForProp(e);
 	if (form.parts.length === 0) return null;
-	const meshes = mergeByColour(
-		form.parts.map((p) => ({ colour: p.colour, opacity: p.opacity, geometry: partGeometry(p) }))
-	);
+	const meshes = mergeByColour(shadeParts(form));
 	if (meshes.length === 0) return null;
 	const group = new Group();
 	for (const m of meshes) group.add(m);

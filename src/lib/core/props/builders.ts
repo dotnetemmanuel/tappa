@@ -78,6 +78,129 @@ type Size = { w: number; d: number; h: number };
 type Built = { parts: Part[]; size: Size; outline: Vec2[] };
 type Builder = (q: Q, rng: Rng) => Built;
 
+const LEAF_LIGHT: Hex = '#84a35f';
+const LEAF_DARK: Hex = '#57733f';
+
+/**
+ * Something growing in a bed: a low rosette of leaves rather than one green ball, with a
+ * couple of taller shoots. Small enough to repeat a dozen times without costing anything.
+ */
+function crop(parts: Part[], x: number, y: number, z: number, size: number, rng: Rng): void {
+	const leaves = 4 + Math.floor(rng() * 3);
+	for (let i = 0; i < leaves; i++) {
+		const a = (i / leaves) * Math.PI * 2 + between(rng, -0.3, 0.3);
+		const d = size * between(rng, 0.28, 0.5);
+		const r = size * between(rng, 0.34, 0.5);
+		parts.push(
+			ball(
+				[x + Math.cos(a) * d, y + r * between(rng, 0.35, 0.6), z + Math.sin(a) * d],
+				[r, r * between(rng, 0.4, 0.6), r * 0.75],
+				i % 2 === 0 ? FOLIAGE : LEAF_LIGHT,
+				{ rotY: -a }
+			)
+		);
+	}
+	const shoots = 1 + Math.floor(rng() * 2);
+	for (let i = 0; i < shoots; i++) {
+		const a = rng() * Math.PI * 2;
+		const d = size * between(rng, 0, 0.25);
+		const h = size * between(rng, 0.9, 1.5);
+		parts.push(cyl([x + Math.cos(a) * d, y + h / 2, z + Math.sin(a) * d], size * 0.09, h, LEAF_DARK));
+		parts.push(
+			ball(
+				[x + Math.cos(a) * d, y + h, z + Math.sin(a) * d],
+				[size * 0.36, size * 0.3, size * 0.36],
+				LEAF_LIGHT
+			)
+		);
+	}
+}
+
+/** Boards with a gap between them, which is what a shed wall, a fence or a bin is made of. */
+function cladding(
+	parts: Part[],
+	o: {
+		at: V3;
+		/** Width and height of the panel, and how thick the boards are. */
+		w: number;
+		h: number;
+		t: number;
+		colour: Hex;
+		/** Board width; the panel is filled with as many as fit. */
+		board?: number;
+		rotY?: number;
+		horizontal?: boolean;
+	}
+): void {
+	const board = o.board ?? 0.14;
+	const n = Math.max(1, Math.round((o.horizontal ? o.h : o.w) / board));
+	const step = (o.horizontal ? o.h : o.w) / n;
+	for (let i = 0; i < n; i++) {
+		const off = -(o.horizontal ? o.h : o.w) / 2 + (i + 0.5) * step;
+		const size: V3 = o.horizontal
+			? [o.w, step * 0.86, o.t]
+			: [step * 0.86, o.h, o.t];
+		const at: V3 = o.horizontal
+			? [o.at[0], o.at[1] + off, o.at[2]]
+			: [o.at[0] + Math.cos(o.rotY ?? 0) * off, o.at[1], o.at[2] - Math.sin(o.rotY ?? 0) * off];
+		parts.push(box(at, size, colourStep(o.colour, i), { rotY: o.rotY }));
+	}
+}
+
+/** Every other board a shade off, so a clad wall is not one flat rectangle of colour. */
+function colourStep(colour: Hex, i: number): Hex {
+	if (i % 3 === 0) return colour;
+	const n = Number.parseInt(colour.slice(1), 16);
+	const d = i % 3 === 1 ? 8 : -8;
+	const r = Math.max(0, Math.min(255, ((n >> 16) & 255) + d));
+	const g = Math.max(0, Math.min(255, ((n >> 8) & 255) + d));
+	const b = Math.max(0, Math.min(255, (n & 255) + d));
+	const hex = (v: number): string => v.toString(16).padStart(2, '0');
+	return `#${hex(r)}${hex(g)}${hex(b)}`;
+}
+
+/** A door you can see the parts of: leaf, frame, handle. */
+function door(parts: Part[], at: V3, w: number, h: number, rotY: number, colour: Hex): void {
+	const c = Math.cos(rotY);
+	const sn = Math.sin(rotY);
+	const along = (d: number): V3 => [at[0] + c * d, at[1], at[2] - sn * d];
+	parts.push(box(at, [w, h, 0.035], colour, { rotY }));
+	for (const sx of [-1, 1]) {
+		parts.push(box(along(sx * (w / 2 + 0.03)), [0.06, h + 0.06, 0.05], WOOD_DARK, { rotY }));
+	}
+	parts.push(box([at[0], at[1] + h / 2 + 0.03, at[2]], [w + 0.12, 0.06, 0.05], WOOD_DARK, { rotY }));
+	const handle = along(w * 0.32);
+	parts.push(box([handle[0], at[1] - 0.02, handle[2]], [0.04, 0.04, 0.09], METAL_DARK, { rotY }));
+}
+
+/** A pane in its frame, so a window is not a floating sheet of glass. */
+function window(parts: Part[], at: V3, w: number, h: number, rotY: number): void {
+	const c = Math.cos(rotY);
+	const sn = Math.sin(rotY);
+	parts.push(box(at, [w, h, 0.02], GLASS, { rotY, opacity: 0.35 }));
+	for (const sx of [-1, 1]) {
+		parts.push(box([at[0] + c * sx * w * 0.5, at[1], at[2] - sn * sx * w * 0.5], [0.05, h + 0.08, 0.04], PAINT, { rotY }));
+		parts.push(box([at[0], at[1] + sx * h * 0.5, at[2]], [w + 0.1, 0.05, 0.04], PAINT, { rotY }));
+	}
+	parts.push(box(at, [0.03, h, 0.03], PAINT, { rotY }));
+}
+
+/** Fascia along the eaves and a cap over the ridge, which is what stops a roof reading as two slabs. */
+function roofTrim(
+	parts: Part[],
+	len: number,
+	width: number,
+	eave: number,
+	ridge: number,
+	overhang: number,
+	colour: Hex
+): void {
+	for (const sz of [-1, 1]) {
+		parts.push(box([0, eave - 0.03, (sz * (width + overhang * 2)) / 2], [len + overhang * 2, 0.11, 0.04], colour));
+	}
+	parts.push(box([0, ridge + 0.05, 0], [len + overhang * 2 + 0.06, 0.06, 0.14], colour));
+}
+
 function num(q: Q, key: string, fallback: number): number {
 	const x = q[key];
 	return typeof x === 'number' && Number.isFinite(x) ? x : fallback;
@@ -198,9 +321,31 @@ function patioSet(q: Q, rng: Rng): Built {
 		const ux = Math.cos(a);
 		const uz = Math.sin(a);
 		const rot = tangential(a);
-		parts.push(box([ux * r, 0.44, uz * r], [0.44, 0.05, 0.44], WOOD, { rotY: rot }));
-		parts.push(box([ux * r, 0.24, uz * r], [0.38, 0.36, 0.38], WOOD_DARK, { rotY: rot }));
-		parts.push(box([ux * (r + 0.2), 0.72, uz * (r + 0.2)], [0.44, 0.5, 0.06], WOOD, { rotY: rot }));
+		const cx = ux * r;
+		const cz = uz * r;
+		// Tangential frame about the table, so a chair faces it however many there are.
+		const along = { x: Math.cos(rot), z: -Math.sin(rot) };
+		const out = { x: ux, z: uz };
+		const at = (o: number, s: number, y: number): V3 => [
+			cx + along.x * s + out.x * o,
+			y,
+			cz + along.z * s + out.z * o
+		];
+		for (const so of [-0.17, 0.17]) {
+			for (const oo of [-0.17, 0.17]) {
+				parts.push(box(at(oo, so, 0.21), [0.045, 0.42, 0.045], WOOD_DARK, { rotY: rot }));
+			}
+		}
+		for (const oo of [-0.14, 0, 0.14]) {
+			parts.push(box(at(oo, 0, 0.44), [0.4, 0.035, 0.1], WOOD, { rotY: rot }));
+		}
+		for (const y of [0.62, 0.75, 0.88]) {
+			parts.push(box(at(0.2, 0, y), [0.4, 0.09, 0.035], WOOD, { rotY: rot }));
+		}
+		for (const so of [-0.19, 0.19]) {
+			parts.push(box(at(0.03, so, 0.63), [0.035, 0.035, 0.34], WOOD_DARK, { rotY: rot }));
+			parts.push(box(at(0.19, so, 0.53), [0.035, 0.22, 0.035], WOOD_DARK, { rotY: rot }));
+		}
 	}
 	const dia = (r + 0.25) * 2;
 	return { parts, size: { w: dia, d: dia, h: 0.95 }, outline: roundOutline(dia) };
@@ -227,17 +372,26 @@ function parasol(q: Q): Built {
 
 function sunLounger(): Built {
 	const parts: Part[] = [
-		box([0, 0.34, 0.2], [0.62, 0.06, 1.3], WOOD),
-		box([0, 0.4, 0.2], [0.56, 0.07, 1.24], CANVAS),
-		box([0, 0.52, -0.7], [0.62, 0.06, 0.62], WOOD, { tiltX: 0.9 }),
-		box([0.32, 0.5, 0.1], [0.05, 0.05, 0.9], WOOD_PALE),
-		box([-0.32, 0.5, 0.1], [0.05, 0.05, 0.9], WOOD_PALE)
+		box([0, 0.34, 0.2], [0.62, 0.05, 1.3], WOOD_DARK),
+		box([0, 0.4, 0.2], [0.56, 0.06, 1.24], CANVAS)
 	];
-	for (const sx of [-1, 1]) {
-		for (const sz of [-1, 1])
-			parts.push(box([sx * 0.28, 0.16, sz * 0.7], [0.05, 0.32, 0.05], WOOD_DARK));
+	// Slats across the deck and the raised back, and arms on posts.
+	for (let i = 0; i < 9; i++) {
+		parts.push(box([0, 0.44, -0.38 + i * 0.14], [0.56, 0.025, 0.1], WOOD));
 	}
-	return { parts, size: { w: 0.7, d: 1.9, h: 0.78 }, outline: rectOutline(0.7, 1.9) };
+	for (let i = 0; i < 4; i++) {
+		parts.push(box([0, 0.42 + i * 0.11, -0.56 - i * 0.09], [0.56, 0.025, 0.1], WOOD, { tiltX: 0.9 }));
+	}
+	parts.push(box([0, 0.52, -0.7], [0.6, 0.04, 0.6], WOOD_DARK, { tiltX: 0.9 }));
+	for (const sx of [-1, 1]) {
+		parts.push(box([sx * 0.32, 0.56, 0.1], [0.05, 0.04, 0.9], WOOD_PALE));
+		parts.push(box([sx * 0.32, 0.5, 0.5], [0.045, 0.16, 0.045], WOOD_PALE));
+		for (const sz of [-1, 1]) {
+			parts.push(box([sx * 0.28, 0.16, sz * 0.7], [0.05, 0.32, 0.05], WOOD_DARK));
+		}
+		parts.push(cyl([sx * 0.28, 0.06, -0.7], 0.12, 0.04, METAL_DARK, { rotY: Math.PI / 2, tiltX: Math.PI / 2 }));
+	}
+	return { parts, size: { w: 0.7, d: 1.9, h: 0.8 }, outline: rectOutline(0.7, 1.9) };
 }
 
 function hammock(q: Q, rng: Rng): Built {
@@ -251,9 +405,22 @@ function hammock(q: Q, rng: Rng): Built {
 		parts.push(box([sx * (L / 2 - L * 0.12), 1.05, 0], [L * 0.2, 0.03, 0.03], ROPE));
 	}
 	const sag = between(rng, 0.5, 0.62);
-	parts.push(box([0, sag, 0], [L * 0.36, 0.07, 0.52], CANVAS));
+	// The bed hangs in a curve and gathers to a point at each end, which is the shape you know.
+	const spans = 7;
+	for (let i = 0; i < spans; i++) {
+		const t = (i + 0.5) / spans;
+		const x = -L / 2 + t * L;
+		const dip = Math.sin(Math.PI * t);
+		parts.push(
+			box([x, sag + (1 - dip) * 0.55, 0], [L / spans + 0.02, 0.05, 0.1 + dip * 0.46], CANVAS, {
+				tiltX: (0.5 - t) * 0.9
+			})
+		);
+	}
 	for (const sx of [-1, 1]) {
-		parts.push(box([sx * L * 0.28, sag + 0.19, 0], [L * 0.26, 0.06, 0.46], CANVAS));
+		for (const dz of [-0.16, 0, 0.16]) {
+			parts.push(box([sx * L * 0.42, sag + 0.42, dz], [L * 0.16, 0.02, 0.02], ROPE, { tiltX: sx * 0.25 }));
+		}
 	}
 	return { parts, size: { w: L, d: 1.2, h: 1.32 }, outline: rectOutline(L, 1.2) };
 }
@@ -292,30 +459,42 @@ function firePit(q: Q, rng: Rng): Built {
 }
 
 function grill(): Built {
+	const bowl = 0.62;
 	const parts: Part[] = [
-		ball([0, 0.78, 0], [0.6, 0.42, 0.6], PLASTIC),
-		ball([0, 1, 0], [0.6, 0.3, 0.6], METAL_DARK),
-		ball([0, 1.16, 0], [0.08, 0.08, 0.08], METAL),
-		box([0.36, 0.86, 0], [0.16, 0.04, 0.04], METAL)
+		// Bowl, lid, vent and handle: the four things that make a kettle read as a kettle.
+		ball([0, 0.72, 0], [bowl, 0.34, bowl], PLASTIC),
+		cyl([0, 0.78, 0], bowl, 0.06, METAL_DARK),
+		ball([0, 0.86, 0], [bowl, 0.3, bowl], METAL_DARK),
+		cyl([0, 1.02, 0], 0.07, 0.05, METAL),
+		box([0, 1.05, 0], [0.05, 0.03, 0.14], METAL),
+		box([0, 0.9, -bowl * 0.46], [0.22, 0.03, 0.03], WOOD_DARK, { tiltX: 0.5 }),
+		cyl([0, 0.36, 0], 0.05, 0.18, METAL_DARK)
 	];
-	for (let i = 0; i < 3; i++) {
-		const a = (i / 3) * Math.PI * 2;
-		parts.push(cyl([Math.cos(a) * 0.26, 0.3, Math.sin(a) * 0.26], 0.035, 0.6, METAL_DARK));
+	// Two legs and two wheels, the way one actually stands.
+	for (const sx of [-1, 1]) {
+		parts.push(
+			box([sx * 0.24, 0.28, 0.16], [0.035, 0.58, 0.035], METAL_DARK, { tiltX: 0.12 }),
+			box([sx * 0.2, 0.3, -0.2], [0.035, 0.62, 0.035], METAL_DARK, { tiltX: -0.16 })
+		);
 	}
-	return { parts, size: { w: 0.7, d: 0.7, h: 1.2 }, outline: roundOutline(0.7) };
+	for (const sx of [-1, 1]) {
+		parts.push(cyl([sx * 0.3, 0.11, -0.24], 0.22, 0.05, PLASTIC, { rotY: Math.PI / 2, tiltX: Math.PI / 2 }));
+	}
+	parts.push(box([0, 0.2, -0.02], [0.44, 0.03, 0.3], METAL_DARK));
+	return { parts, size: { w: 0.74, d: 0.72, h: 1.08 }, outline: roundOutline(0.74) };
 }
 
-function pot(q: Q): Built {
+function pot(q: Q, rng: Rng): Built {
 	const D = num(q, 'diameter', 0.45);
 	const h = D * 0.85;
 	const parts: Part[] = [
 		cyl([0, h * 0.28, 0], D * 0.76, h * 0.56, TERRACOTTA),
 		cyl([0, h * 0.74, 0], D, h * 0.44, TERRACOTTA),
 		cyl([0, h - 0.01, 0], D * 1.06, 0.05, WOOD_PALE),
-		cyl([0, h - 0.03, 0], D * 0.9, 0.04, SOIL),
-		ball([0, h + D * 0.26, 0], [D * 1.15, D * 0.72, D * 1.15], FOLIAGE)
+		cyl([0, h - 0.03, 0], D * 0.9, 0.04, SOIL)
 	];
-	return { parts, size: { w: D * 1.15, d: D * 1.15, h: h + D * 0.62 }, outline: roundOutline(D) };
+	crop(parts, 0, h - 0.02, 0, D * 0.9, rng);
+	return { parts, size: { w: D * 1.15, d: D * 1.15, h: h + D * 0.9 }, outline: roundOutline(D) };
 }
 
 function planterBox(q: Q, rng: Rng): Built {
@@ -334,8 +513,7 @@ function planterBox(q: Q, rng: Rng): Built {
 	}
 	for (let i = 0; i < 3; i++) {
 		const x = (i - 1) * (L / 3.4) + between(rng, -0.04, 0.04);
-		const s = between(rng, 0.18, 0.28);
-		parts.push(ball([x, H + s * 0.3, between(rng, -0.05, 0.05)], [s, s * 0.8, s], FOLIAGE));
+		crop(parts, x, H - 0.03, between(rng, -0.05, 0.05), between(rng, 0.2, 0.3), rng);
 	}
 	return { parts, size: { w: L, d: D, h: H + 0.3 }, outline: rectOutline(L, D) };
 }
@@ -353,8 +531,7 @@ function palletCollar(q: Q, rng: Rng): Built {
 	for (let i = 0; i < 6; i++) {
 		const x = ((i % 3) - 1) * 0.34 + between(rng, -0.05, 0.05);
 		const z = (Math.floor(i / 3) - 0.5) * 0.34 + between(rng, -0.04, 0.04);
-		const s = between(rng, 0.16, 0.26);
-		parts.push(ball([x, H + s * 0.25, z], [s, s * 0.75, s], FOLIAGE));
+		crop(parts, x, H - 0.03, z, between(rng, 0.18, 0.26), rng);
 	}
 	return { parts, size: { w: 1.2, d: 0.8, h: H + 0.25 }, outline: rectOutline(1.2, 0.8) };
 }
@@ -381,13 +558,15 @@ function raisedBed(q: Q, rng: Rng): Built {
 			);
 		}
 	}
-	const rows = Math.max(2, Math.round(L / 0.6));
+	// Sown in rows across the bed, the way a kitchen garden actually is.
+	const rows = Math.max(2, Math.round(L / 0.45));
+	const perRow = Math.max(2, Math.round(W / 0.32));
 	for (let i = 0; i < rows; i++) {
-		const x = -L / 2 + ((i + 0.5) * L) / rows + between(rng, -0.03, 0.03);
-		const s = between(rng, 0.2, 0.32);
-		parts.push(
-			ball([x, H + s * 0.25, between(rng, -W * 0.15, W * 0.15)], [s, s * 0.7, W * 0.6], FOLIAGE)
-		);
+		const x = -L / 2 + ((i + 0.5) * L) / rows + between(rng, -0.02, 0.02);
+		for (let k = 0; k < perRow; k++) {
+			const z = -W / 2 + ((k + 0.5) * W) / perRow + between(rng, -0.02, 0.02);
+			crop(parts, x, H - 0.04, z, between(rng, 0.13, 0.2), rng);
+		}
 	}
 	return { parts, size: { w: L, d: W, h: H + 0.3 }, outline: rectOutline(L, W) };
 }
@@ -410,14 +589,24 @@ function coldFrame(q: Q): Built {
 function compostBin(q: Q): Built {
 	const W = num(q, 'width', 0.8);
 	const parts: Part[] = [];
-	for (const y of [0.15, 0.45, 0.75]) {
-		for (const sz of [-1, 1]) parts.push(box([0, y, (sz * (W - 0.03)) / 2], [W, 0.14, 0.03], WOOD));
+	// Slatted sides with air gaps, which is what a compost bin is; posts at the corners.
+	for (const y of [0.12, 0.32, 0.52, 0.72]) {
+		for (const sz of [-1, 1]) parts.push(box([0, y, (sz * (W - 0.03)) / 2], [W, 0.15, 0.028], WOOD));
 		for (const sx of [-1, 1]) {
-			parts.push(box([(sx * (W - 0.03)) / 2, y, 0], [0.03, 0.14, W - 0.06], WOOD));
+			parts.push(box([(sx * (W - 0.03)) / 2, y, 0], [0.028, 0.15, W - 0.06], WOOD));
 		}
 	}
-	parts.push(box([0, 0.92, 0], [W + 0.06, 0.04, W + 0.06], PLASTIC));
-	return { parts, size: { w: W, d: W, h: 0.94 }, outline: rectOutline(W, W) };
+	for (const sx of [-1, 1]) {
+		for (const sz of [-1, 1]) {
+			parts.push(box([sx * (W / 2 - 0.03), 0.42, sz * (W / 2 - 0.03)], [0.06, 0.86, 0.06], WOOD_DARK));
+		}
+	}
+	parts.push(box([0, 0.78, 0], [W - 0.1, 0.12, W - 0.1], SOIL));
+	parts.push(box([0, 0.88, 0.02], [W + 0.08, 0.035, W + 0.06], PLASTIC, { tiltX: 0.06 }));
+	for (const sx of [-1, 1]) {
+		parts.push(box([sx * W * 0.3, 0.9, -W / 2 + 0.03], [0.1, 0.03, 0.06], METAL_DARK));
+	}
+	return { parts, size: { w: W + 0.08, d: W + 0.08, h: 0.92 }, outline: rectOutline(W + 0.08, W + 0.08) };
 }
 
 function trellis(q: Q): Built {
@@ -484,22 +673,31 @@ function shed(q: Q): Built {
 	const W = num(q, 'width', 2.4);
 	const H = num(q, 'height', 2.1);
 	const ridge = H + W * 0.22;
-	const parts: Part[] = [
-		box([0, 0.07, 0], [L + 0.12, 0.14, W + 0.12], STONE_DARK),
-		box([0, H / 2, -W / 2 + 0.02], [L, H, 0.04], FALU),
-		box([0, H / 2, W / 2 - 0.02], [L, H, 0.04], FALU),
-		box([-L / 2 + 0.02, H / 2, 0], [0.04, H, W - 0.04], FALU),
-		box([L / 2 - 0.02, H / 2, 0], [0.04, H, W - 0.04], FALU),
-		box([L / 2 + 0.03, H * 0.45, 0], [0.03, H * 0.9, 0.85], PAINT),
-		box([L * 0.25, H * 0.62, W / 2 + 0.03], [0.55, 0.5, 0.03], GLASS, { opacity: 0.4 })
-	];
+	const parts: Part[] = [box([0, 0.07, 0], [L + 0.12, 0.14, W + 0.12], STONE_DARK)];
+
+	// Boarded walls with corner posts, a door on the gable end and a window on the long side.
+	cladding(parts, { at: [0, H / 2, -W / 2 + 0.02], w: L, h: H, t: 0.04, colour: FALU });
+	cladding(parts, { at: [0, H / 2, W / 2 - 0.02], w: L, h: H, t: 0.04, colour: FALU });
 	for (const sx of [-1, 1]) {
+		cladding(parts, {
+			at: [sx * (L / 2 - 0.02), H / 2, 0],
+			w: W - 0.04,
+			h: H,
+			t: 0.04,
+			colour: FALU,
+			rotY: Math.PI / 2
+		});
 		for (const sz of [-1, 1]) {
 			parts.push(box([sx * (L / 2 - 0.05), H / 2, sz * (W / 2 - 0.05)], [0.1, H, 0.1], PAINT));
 		}
 		parts.push(box([sx * L * 0.5, (H + ridge) / 2, 0], [0.04, ridge - H, W * 0.72], FALU));
 	}
-	gableRoof(parts, L, W, H, ridge, 0.18, WOOD_DARK);
+	door(parts, [L / 2 + 0.04, H * 0.45, 0], 0.85, H * 0.9, Math.PI / 2, PAINT);
+	window(parts, [L * 0.22, H * 0.62, W / 2 + 0.04], 0.6, 0.5, 0);
+	parts.push(box([L / 2 + 0.1, 0.02, 0], [0.5, 0.05, 1], STONE));
+
+	gableRoof(parts, L, W, H, ridge, 0.22, WOOD_DARK);
+	roofTrim(parts, L, W, H, ridge, 0.22, PAINT);
 	return { parts, size: { w: L, d: W, h: ridge }, outline: rectOutline(L, W) };
 }
 
@@ -552,12 +750,29 @@ function gazebo(q: Q): Built {
 }
 
 function dogHouse(): Built {
-	const parts: Part[] = [
-		box([0, 0.3, 0], [1, 0.6, 0.7], WOOD),
-		box([0, 0.21, 0.351], [0.34, 0.42, 0.02], EMBER)
-	];
-	gableRoof(parts, 1, 0.7, 0.6, 0.88, 0.08, FALU);
-	return { parts, size: { w: 1, d: 0.7, h: 0.88 }, outline: rectOutline(1, 0.7) };
+	const parts: Part[] = [box([0, 0.05, 0], [1.06, 0.1, 0.76], WOOD_DARK)];
+	cladding(parts, { at: [0, 0.35, -0.34], w: 1, h: 0.6, t: 0.04, colour: WOOD, board: 0.1 });
+	cladding(parts, { at: [0, 0.35, 0.34], w: 1, h: 0.6, t: 0.04, colour: WOOD, board: 0.1 });
+	for (const sx of [-1, 1]) {
+		cladding(parts, {
+			at: [sx * 0.48, 0.35, 0],
+			w: 0.68,
+			h: 0.6,
+			t: 0.04,
+			colour: WOOD,
+			board: 0.1,
+			rotY: Math.PI / 2
+		});
+	}
+	// The doorway is a hole, so it is cut by drawing the wall around it rather than over it.
+	parts.push(box([0, 0.26, 0.36], [0.36, 0.44, 0.03], EMBER));
+	for (const sx of [-1, 1]) {
+		parts.push(box([sx * 0.24, 0.35, 0.37], [0.05, 0.6, 0.04], WOOD_PALE));
+	}
+	parts.push(box([0, 0.6, 0.37], [0.44, 0.06, 0.04], WOOD_PALE));
+	gableRoof(parts, 1, 0.7, 0.65, 0.95, 0.1, FALU);
+	roofTrim(parts, 1, 0.7, 0.65, 0.95, 0.1, WOOD_PALE);
+	return { parts, size: { w: 1.05, d: 0.75, h: 0.95 }, outline: rectOutline(1.05, 0.75) };
 }
 
 function playhouse(q: Q): Built {
@@ -565,52 +780,88 @@ function playhouse(q: Q): Built {
 	const D = W * 0.9;
 	const H = 1.35;
 	const ridge = H + D * 0.3;
-	const parts: Part[] = [
-		box([0, H / 2, -D / 2 + 0.02], [W, H, 0.04], FALU),
-		box([0, H / 2, D / 2 - 0.02], [W, H, 0.04], FALU),
-		box([-W / 2 + 0.02, H / 2, 0], [0.04, H, D - 0.04], FALU),
-		box([W / 2 - 0.02, H / 2, 0], [0.04, H, D - 0.04], FALU),
-		box([0, H * 0.4, D / 2 + 0.03], [0.5, H * 0.8, 0.03], PAINT),
-		box([W / 2 + 0.03, H * 0.62, 0], [0.03, 0.4, 0.4], GLASS, { opacity: 0.4 })
-	];
+	const parts: Part[] = [box([0, 0.06, 0], [W + 0.1, 0.12, D + 0.1], WOOD_DARK)];
+	cladding(parts, { at: [0, H / 2, -D / 2 + 0.02], w: W, h: H, t: 0.04, colour: FALU, board: 0.11 });
+	cladding(parts, { at: [0, H / 2, D / 2 - 0.02], w: W, h: H, t: 0.04, colour: FALU, board: 0.11 });
 	for (const sx of [-1, 1]) {
+		cladding(parts, {
+			at: [sx * (W / 2 - 0.02), H / 2, 0],
+			w: D - 0.04,
+			h: H,
+			t: 0.04,
+			colour: FALU,
+			board: 0.11,
+			rotY: Math.PI / 2
+		});
 		parts.push(box([(sx * W) / 2, (H + ridge) / 2, 0], [0.04, ridge - H, D * 0.7], FALU));
 	}
-	gableRoof(parts, W, D, H, ridge, 0.12, WOOD_DARK);
+	door(parts, [0, H * 0.4, D / 2 + 0.04], 0.5, H * 0.78, 0, PAINT);
+	window(parts, [W / 2 + 0.04, H * 0.62, 0], 0.42, 0.4, Math.PI / 2);
+	// A child's house has a flower box under the window, which is most of what makes it read as one.
+	parts.push(box([W / 2 + 0.11, H * 0.4, 0], [0.12, 0.14, 0.5], WOOD_PALE));
+	gableRoof(parts, W, D, H, ridge, 0.14, WOOD_DARK);
+	roofTrim(parts, W, D, H, ridge, 0.14, PAINT);
 	return { parts, size: { w: W, d: D, h: ridge }, outline: rectOutline(W, D) };
 }
 
 function trampoline(q: Q): Built {
 	const D = num(q, 'diameter', 3);
 	const parts: Part[] = [
-		cyl([0, 0.82, 0], D - 0.34, 0.03, '#2f3a3d'),
-		cyl([0, 0.88, 0], D, 0.14, '#4f6d7a')
+		cyl([0, 0.8, 0], D - 0.42, 0.03, '#2f3a3d'),
+		cyl([0, 0.86, 0], D, 0.16, '#4f6d7a'),
+		cyl([0, 0.79, 0], D - 0.06, 0.04, METAL)
 	];
-	for (let i = 0; i < 6; i++) {
-		const a = (i / 6) * Math.PI * 2;
-		const r = D / 2 - 0.06;
-		parts.push(cyl([Math.cos(a) * r, 0.4, Math.sin(a) * r], 0.05, 0.8, METAL));
+	// Springs under the pad, and legs in pairs the way one actually stands.
+	const springs = Math.max(12, Math.round(D * 8));
+	for (let i = 0; i < springs; i++) {
+		const a = (i / springs) * Math.PI * 2;
+		const r = (D - 0.24) / 2;
+		parts.push(box([Math.cos(a) * r, 0.79, Math.sin(a) * r], [0.18, 0.02, 0.02], METAL, { rotY: -a }));
 	}
-	return { parts, size: { w: D, d: D, h: 0.95 }, outline: roundOutline(D) };
+	for (let i = 0; i < 3; i++) {
+		const a = (i / 3) * Math.PI * 2;
+		const r = D / 2 - 0.06;
+		parts.push(box([Math.cos(a) * r, 0.4, Math.sin(a) * r], [0.06, 0.8, 0.06], METAL, { rotY: -a, tiltX: 0.12 }));
+		parts.push(box([Math.cos(a) * r, 0.4, Math.sin(a) * r], [0.06, 0.8, 0.06], METAL, { rotY: -a, tiltX: -0.12 }));
+		parts.push(box([Math.cos(a) * r * 0.95, 0.03, Math.sin(a) * r * 0.95], [0.06, 0.05, 0.5], METAL_DARK, { rotY: -a }));
+	}
+	return { parts, size: { w: D, d: D, h: 0.94 }, outline: roundOutline(D) };
 }
 
-function sandpit(q: Q): Built {
+function sandpit(q: Q, rng: Rng): Built {
 	const W = num(q, 'width', 1.5);
-	const parts: Part[] = [
-		box([0, 0.09, 0], [W - 0.24, 0.18, W - 0.24], SAND),
-		box([0, 0.125, -W / 2 + 0.06], [W, 0.25, 0.12], WOOD),
-		box([0, 0.125, W / 2 - 0.06], [W, 0.25, 0.12], WOOD),
-		box([-W / 2 + 0.06, 0.125, 0], [0.12, 0.25, W - 0.24], WOOD),
-		box([W / 2 - 0.06, 0.125, 0], [0.12, 0.25, W - 0.24], WOOD)
-	];
+	const parts: Part[] = [box([0, 0.09, 0], [W - 0.24, 0.18, W - 0.24], SAND)];
+	for (const sz of [-1, 1]) {
+		cladding(parts, { at: [0, 0.14, sz * (W / 2 - 0.06)], w: W, h: 0.28, t: 0.11, colour: WOOD, horizontal: true });
+	}
+	for (const sx of [-1, 1]) {
+		cladding(parts, {
+			at: [sx * (W / 2 - 0.06), 0.14, 0],
+			w: W - 0.24,
+			h: 0.28,
+			t: 0.11,
+			colour: WOOD,
+			horizontal: true,
+			rotY: Math.PI / 2
+		});
+	}
+	// Corner seats, and sand that is not perfectly level.
 	for (const sx of [-1, 1]) {
 		for (const sz of [-1, 1]) {
-			parts.push(
-				box([sx * (W / 2 - 0.17), 0.27, sz * (W / 2 - 0.17)], [0.34, 0.05, 0.34], WOOD_PALE)
-			);
+			parts.push(box([sx * (W / 2 - 0.17), 0.29, sz * (W / 2 - 0.17)], [0.36, 0.05, 0.36], WOOD_PALE));
 		}
 	}
-	return { parts, size: { w: W, d: W, h: 0.3 }, outline: rectOutline(W, W) };
+	for (let i = 0; i < 3; i++) {
+		const s2 = between(rng, 0.2, 0.34);
+		parts.push(
+			ball(
+				[between(rng, -W * 0.25, W * 0.25), 0.18, between(rng, -W * 0.25, W * 0.25)],
+				[s2, s2 * 0.3, s2],
+				SAND
+			)
+		);
+	}
+	return { parts, size: { w: W, d: W, h: 0.32 }, outline: rectOutline(W, W) };
 }
 
 function swingSet(q: Q): Built {
@@ -623,12 +874,26 @@ function swingSet(q: Q): Built {
 		for (const t of [splay, -splay]) {
 			parts.push(box([(sx * W) / 2, H / 2, 0], [0.1, legLen, 0.1], WOOD, { tiltX: t }));
 		}
+		// The cross brace is what stops an A frame reading as two loose sticks.
+		parts.push(box([(sx * W) / 2, H * 0.42, 0], [0.07, 0.07, H * Math.tan(splay) * 1.4], WOOD_PALE));
+		parts.push(box([(sx * W) / 2, H - 0.06, 0], [0.14, 0.14, 0.2], METAL_DARK));
 	}
 	for (const sx of [-1, 1]) {
 		const x = sx * W * 0.22;
-		parts.push(box([x, 0.45, 0], [0.46, 0.05, 0.2], PLASTIC));
+		// One flat seat and one cradle, the way a set actually comes.
+		if (sx < 0) {
+			parts.push(box([x, 0.45, 0], [0.46, 0.05, 0.2], PLASTIC));
+		} else {
+			parts.push(box([x, 0.5, 0], [0.4, 0.06, 0.26], PLASTIC));
+			for (const sz of [-1, 1]) parts.push(box([x, 0.62, sz * 0.13], [0.4, 0.2, 0.04], PLASTIC));
+		}
+		const seatY = sx < 0 ? 0.45 : 0.5;
 		for (const dx of [-0.19, 0.19]) {
-			parts.push(box([x + dx, (H + 0.45) / 2, 0], [0.03, H - 0.45, 0.03], ROPE));
+			const links = 7;
+			for (let k = 0; k < links; k++) {
+				const y = seatY + ((H - 0.12 - seatY) * (k + 0.5)) / links;
+				parts.push(cyl([x + dx, y, 0], 0.022, (H - seatY) / links - 0.02, METAL, { tiltX: k % 2 ? 0.5 : 0 }));
+			}
 		}
 	}
 	const d = 2 * H * Math.tan(splay) + 0.2;
@@ -640,10 +905,7 @@ function footballGoal(q: Q): Built {
 	const H = Math.min(2.44, Math.max(1, W * 0.55));
 	const lean = 0.4;
 	const depth = H * Math.tan(lean);
-	const parts: Part[] = [
-		box([0, H, 0], [W + 0.09, 0.09, 0.09], PAINT),
-		box([0, H / 2, -depth / 2], [W, H, depth], PAINT, { opacity: 0.14 })
-	];
+	const parts: Part[] = [box([0, H, 0], [W + 0.09, 0.09, 0.09], PAINT)];
 	for (const sx of [-1, 1]) {
 		parts.push(cyl([(sx * W) / 2, H / 2, 0], 0.09, H, PAINT));
 		parts.push(
@@ -651,6 +913,22 @@ function footballGoal(q: Q): Built {
 				tiltX: lean
 			})
 		);
+		parts.push(box([(sx * W) / 2, 0.03, -depth / 2], [0.06, 0.06, depth], PAINT));
+	}
+	// The net as cords: a grid across the back and down the sides, in its own off white.
+	const NET: Hex = '#cfd3cc';
+	const cords = Math.max(5, Math.round(W / 0.28));
+	for (let i = 0; i < cords; i++) {
+		const x = -W / 2 + ((i + 0.5) * W) / cords;
+		parts.push(box([x, H / 2, -depth], [0.012, H, 0.012], NET, { opacity: 0.75 }));
+	}
+	const rows = Math.max(4, Math.round(H / 0.28));
+	for (let i = 0; i < rows; i++) {
+		const y = ((i + 0.5) * H) / rows;
+		parts.push(box([0, y, -depth], [W, 0.012, 0.012], NET, { opacity: 0.75 }));
+		for (const sx of [-1, 1]) {
+			parts.push(box([(sx * W) / 2, y, -depth / 2], [0.012, 0.012, depth], NET, { opacity: 0.75 }));
+		}
 	}
 	const d = depth + 0.1;
 	const x = (W + 0.09) / 2;
@@ -687,6 +965,20 @@ function rotaryDryer(q: Q): Built {
 		const a = (i / 4) * Math.PI;
 		parts.push(box([0, 1.78 - i * 0.02, 0], [D, 0.04, 0.04], METAL, { rotY: -a }));
 	}
+	// Lines strung between the arms, in rings, which is the whole point of the thing.
+	for (const ring of [0.34, 0.55, 0.76, 0.94]) {
+		const r = (D / 2) * ring;
+		const sides = 8;
+		for (let i = 0; i < sides; i++) {
+			const a = (i / sides) * Math.PI * 2 + Math.PI / sides;
+			const chord = 2 * r * Math.sin(Math.PI / sides);
+			parts.push(
+				box([Math.cos(a) * r * Math.cos(Math.PI / sides), 1.72 - ring * 0.06, Math.sin(a) * r * Math.cos(Math.PI / sides)], [chord, 0.012, 0.012], CANVAS, {
+					rotY: tangential(a)
+				})
+			);
+		}
+	}
 	return { parts, size: { w: D, d: D, h: 1.95 }, outline: roundOutline(D) };
 }
 
@@ -717,26 +1009,38 @@ function logPile(q: Q, rng: Rng): Built {
 function bikeRack(q: Q): Built {
 	const places = Math.max(2, Math.round(num(q, 'places', 4)));
 	const W = places * 0.4;
+	// Galvanised hoops on a darker ground rail, with a foot plate at each end.
 	const parts: Part[] = [
-		box([0, 0.05, -0.3], [W, 0.05, 0.05], METAL),
-		box([0, 0.05, 0.3], [W, 0.05, 0.05], METAL)
+		box([0, 0.05, -0.3], [W, 0.05, 0.05], METAL_DARK),
+		box([0, 0.05, 0.3], [W, 0.05, 0.05], METAL_DARK)
 	];
+	for (const sx of [-1, 1]) {
+		for (const sz of [-1, 1]) {
+			parts.push(box([(sx * W) / 2, 0.02, sz * 0.3], [0.1, 0.03, 0.1], METAL_DARK));
+		}
+	}
 	for (let i = 0; i < places; i++) {
 		const x = -W / 2 + (i + 0.5) * 0.4;
 		for (const dx of [-0.055, 0.055]) parts.push(cyl([x + dx, 0.21, 0], 0.04, 0.42, METAL));
+		parts.push(box([x, 0.42, 0], [0.15, 0.04, 0.04], METAL));
 	}
 	return { parts, size: { w: W, d: 0.7, h: 0.42 }, outline: rectOutline(W, 0.7) };
 }
 
 function mailbox(): Built {
 	const parts: Part[] = [
-		box([0, 0.52, 0], [0.09, 1.04, 0.09], WOOD),
-		box([0, 1.22, 0], [0.4, 0.28, 0.32], METAL_DARK),
-		box([0, 1.37, 0], [0.42, 0.04, 0.34], METAL),
-		box([0, 1.24, 0.17], [0.24, 0.03, 0.02], PAINT),
-		box([0.22, 1.28, 0], [0.03, 0.16, 0.02], FALU)
+		box([0, 0.5, 0], [0.09, 1, 0.09], WOOD),
+		box([0, 1.01, 0], [0.13, 0.03, 0.13], WOOD_DARK),
+		box([0, 1.06, 0], [0.16, 0.06, 0.5], WOOD_DARK),
+		box([0, 1.24, 0], [0.4, 0.3, 0.32], METAL_DARK),
+		// A rounded lid, a slot, a plate for the name and a flag on its pivot.
+		cyl([0, 1.39, 0], 0.4, 0.32, METAL, { rotY: Math.PI / 2, tiltX: Math.PI / 2 }),
+		box([0, 1.27, 0.17], [0.26, 0.025, 0.02], PAINT),
+		box([0, 1.14, 0.17], [0.22, 0.07, 0.015], PAINT),
+		box([0.21, 1.3, 0], [0.02, 0.02, 0.02], METAL),
+		box([0.22, 1.4, 0], [0.02, 0.18, 0.05], FALU)
 	];
-	return { parts, size: { w: 0.4, d: 0.35, h: 1.4 }, outline: rectOutline(0.4, 0.35) };
+	return { parts, size: { w: 0.44, d: 0.5, h: 1.5 }, outline: rectOutline(0.44, 0.5) };
 }
 
 function wheelieBin(q: Q): Built {
@@ -746,10 +1050,14 @@ function wheelieBin(q: Q): Built {
 	const parts: Part[] = [];
 	for (let i = 0; i < n; i++) {
 		const x = (i - (n - 1) / 2) * pitch;
-		parts.push(box([x, 0.48, 0], [0.58, 0.9, 0.72], PLASTIC));
-		parts.push(box([x, 0.96, -0.02], [0.6, 0.06, 0.74], METAL_DARK));
+		// A bin is a tapered tub with a lipped lid, a handle bar and two wheels at the back.
+		parts.push(box([x, 0.3, 0.02], [0.52, 0.56, 0.64], PLASTIC));
+		parts.push(box([x, 0.72, 0], [0.58, 0.32, 0.7], PLASTIC));
+		parts.push(box([x, 0.93, -0.01], [0.6, 0.05, 0.72], METAL_DARK));
+		parts.push(box([x, 0.97, 0.3], [0.34, 0.04, 0.06], METAL_DARK));
+		parts.push(box([x, 1.02, -0.32], [0.42, 0.05, 0.05], METAL_DARK));
 		for (const dx of [-0.24, 0.24]) {
-			parts.push(cyl([x + dx, 0.1, -0.28], 0.2, 0.05, EMBER, { tiltX: Math.PI / 2 }));
+			parts.push(cyl([x + dx, 0.1, -0.28], 0.2, 0.06, EMBER, { tiltX: Math.PI / 2 }));
 		}
 	}
 	return { parts, size: { w: W, d: 0.75, h: 1 }, outline: rectOutline(W, 0.75) };
@@ -789,8 +1097,15 @@ function lantern(q: Q): Built {
 		box([0, H - 0.14, 0], [0.16, 0.2, 0.16], '#f2e2b8', { opacity: 0.55 }),
 		box([0, H - 0.25, 0], [0.19, 0.03, 0.19], METAL_DARK),
 		box([0, H - 0.03, 0], [0.19, 0.03, 0.19], METAL_DARK),
-		cone([0, H + 0.06, 0], 0.26, 0.12, METAL_DARK)
+		cone([0, H + 0.06, 0], 0.26, 0.12, METAL_DARK),
+		ball([0, H + 0.14, 0], [0.05, 0.06, 0.05], METAL_DARK)
 	];
+	// Corner bars round the glass, which is what makes it a lantern and not a glowing cube.
+	for (const sx of [-1, 1]) {
+		for (const sz of [-1, 1]) {
+			parts.push(box([sx * 0.08, H - 0.14, sz * 0.08], [0.02, 0.22, 0.02], METAL_DARK));
+		}
+	}
 	return { parts, size: { w: 0.3, d: 0.3, h: H + 0.12 }, outline: roundOutline(0.3) };
 }
 
@@ -808,12 +1123,22 @@ function bollardLight(q: Q): Built {
 function heatPump(): Built {
 	const parts: Part[] = [
 		box([0, 0.42, 0], [0.9, 0.62, 0.33], METAL),
-		cyl([0, 0.45, 0.17], 0.44, 0.04, METAL_DARK, { tiltX: Math.PI / 2 }),
-		cyl([0, 0.45, 0.2], 0.12, 0.04, PLASTIC, { tiltX: Math.PI / 2 }),
+		box([0, 0.74, 0], [0.92, 0.04, 0.35], METAL_DARK),
+		cyl([0, 0.45, 0.17], 0.46, 0.03, METAL_DARK, { tiltX: Math.PI / 2 }),
+		cyl([0, 0.45, 0.19], 0.12, 0.04, PLASTIC, { tiltX: Math.PI / 2 }),
 		box([-0.35, 0.055, 0], [0.1, 0.11, 0.36], METAL_DARK),
 		box([0.35, 0.055, 0], [0.1, 0.11, 0.36], METAL_DARK)
 	];
-	return { parts, size: { w: 0.9, d: 0.4, h: 0.73 }, outline: rectOutline(0.9, 0.4) };
+	// Fan guard bars across the opening, and a louvred back.
+	for (let i = 0; i < 5; i++) {
+		const y = 0.45 + (i - 2) * 0.09;
+		parts.push(box([0, y, 0.185], [0.44, 0.015, 0.015], METAL_DARK));
+	}
+	for (let i = 0; i < 6; i++) {
+		parts.push(box([0, 0.2 + i * 0.09, -0.17], [0.84, 0.05, 0.02], METAL_DARK, { tiltX: 0.3 }));
+	}
+	parts.push(cyl([0.3, 0.18, -0.2], 0.05, 0.3, METAL_DARK, { tiltX: Math.PI / 2 }));
+	return { parts, size: { w: 0.92, d: 0.42, h: 0.78 }, outline: rectOutline(0.92, 0.42) };
 }
 
 function hotTub(q: Q): Built {
@@ -845,23 +1170,35 @@ function waterButt(q: Q): Built {
 	const D = num(q, 'diameter', 0.6);
 	const H = 0.9;
 	const parts: Part[] = [
-		cyl([0, H / 2, 0], D, H, PLASTIC),
-		cyl([0, H * 0.3, 0], D + 0.03, 0.04, METAL_DARK),
-		cyl([0, H * 0.7, 0], D + 0.03, 0.04, METAL_DARK),
-		cyl([0, H + 0.02, 0], D + 0.05, 0.05, METAL_DARK),
-		box([0, 0.16, D / 2], [0.06, 0.06, 0.12], METAL)
+		cyl([0, 0.06, 0], D * 0.72, 0.12, STONE_DARK),
+		cyl([0, H * 0.32, 0], D * 0.94, H * 0.5, PLASTIC),
+		cyl([0, H * 0.75, 0], D, H * 0.38, PLASTIC),
+		cyl([0, H * 0.3, 0], D + 0.03, 0.035, METAL_DARK),
+		cyl([0, H * 0.66, 0], D + 0.03, 0.035, METAL_DARK),
+		cyl([0, H + 0.02, 0], D + 0.06, 0.05, METAL_DARK),
+		// The tap, its spout and a little standpipe, which is what you recognise it by.
+		box([0, 0.2, D / 2 - 0.02], [0.05, 0.05, 0.1], METAL),
+		cyl([0, 0.16, D / 2 + 0.04], 0.03, 0.09, METAL),
+		box([0, 0.24, D / 2 + 0.04], [0.09, 0.02, 0.02], METAL)
 	];
-	return { parts, size: { w: D + 0.05, d: D + 0.05, h: H + 0.05 }, outline: roundOutline(D) };
+	return { parts, size: { w: D + 0.06, d: D + 0.12, h: H + 0.05 }, outline: roundOutline(D + 0.06) };
 }
 
 function birdBath(): Built {
 	const parts: Part[] = [
-		cyl([0, 0.03, 0], 0.36, 0.06, STONE_DARK),
-		cyl([0, 0.4, 0], 0.13, 0.7, STONE),
-		cyl([0, 0.79, 0], 0.5, 0.1, STONE),
-		cyl([0, 0.84, 0], 0.42, 0.02, WATER, { opacity: 0.9 })
+		cyl([0, 0.04, 0], 0.42, 0.08, STONE_DARK),
+		cyl([0, 0.11, 0], 0.3, 0.08, STONE),
+		cyl([0, 0.42, 0], 0.13, 0.62, STONE),
+		cyl([0, 0.74, 0], 0.22, 0.06, STONE),
+		cyl([0, 0.8, 0], 0.52, 0.08, STONE),
+		cyl([0, 0.85, 0], 0.46, 0.03, WATER, { opacity: 0.9 })
 	];
-	return { parts, size: { w: 0.5, d: 0.5, h: 0.85 }, outline: roundOutline(0.5) };
+	// Flutes up the column, which is what stops it reading as a length of pipe.
+	for (let i = 0; i < 8; i++) {
+		const a = (i / 8) * Math.PI * 2;
+		parts.push(box([Math.cos(a) * 0.065, 0.42, Math.sin(a) * 0.065], [0.03, 0.6, 0.03], STONE_DARK, { rotY: -a }));
+	}
+	return { parts, size: { w: 0.52, d: 0.52, h: 0.88 }, outline: roundOutline(0.52) };
 }
 
 function pool(q: Q): Built {
@@ -894,19 +1231,23 @@ function boulder(q: Q, rng: Rng): Built {
 	const D = num(q, 'diameter', 0.9);
 	const h = D * between(rng, 0.55, 0.8);
 	const parts: Part[] = [
-		ball([0, h / 2, 0], [D, h, D * between(rng, 0.82, 1)], STONE, { rotY: rng() * Math.PI }),
-		ball(
-			[between(rng, -0.15, 0.15) * D, h * 0.35, between(rng, -0.2, 0.2) * D],
-			[D * 0.6, h * 0.7, D * 0.55],
-			STONE_DARK,
-			{ rotY: rng() * Math.PI }
-		),
-		ball(
-			[between(rng, -0.25, 0.25) * D, h * 0.25, between(rng, -0.25, 0.25) * D],
-			[D * 0.4, h * 0.5, D * 0.4],
-			STONE
-		)
+		ball([0, h / 2, 0], [D, h, D * between(rng, 0.82, 1)], STONE, { rotY: rng() * Math.PI })
 	];
+	// Lumps and a shoulder or two, so the outline is broken rather than an egg.
+	const lumps = 5 + Math.floor(rng() * 3);
+	for (let i = 0; i < lumps; i++) {
+		const a = (i / lumps) * Math.PI * 2 + between(rng, -0.5, 0.5);
+		const d = D * between(rng, 0.15, 0.34);
+		const r = D * between(rng, 0.3, 0.52);
+		parts.push(
+			ball(
+				[Math.cos(a) * d, h * between(rng, 0.2, 0.6), Math.sin(a) * d],
+				[r, h * between(rng, 0.4, 0.75), r * between(rng, 0.75, 1)],
+				i % 2 === 0 ? STONE : STONE_DARK,
+				{ rotY: rng() * Math.PI }
+			)
+		);
+	}
 	const outline: Vec2[] = [];
 	for (let i = 0; i < 14; i++) {
 		const a = (i / 14) * Math.PI * 2;
@@ -929,9 +1270,16 @@ function birdTable(q: Q): Built {
 		for (const sz of [-1, 1]) {
 			parts.push(box([sx * 0.19, H + 0.15, sz * 0.19], [0.03, 0.26, 0.03], WOOD));
 		}
+		// A lip round the tray keeps the seed on it, and that lip is what you recognise.
+		parts.push(box([sx * 0.21, H + 0.04, 0], [0.03, 0.05, 0.44], WOOD_PALE));
+		parts.push(box([0, H + 0.04, sx * 0.21], [0.44, 0.05, 0.03], WOOD_PALE));
 	}
-	gableRoof(parts, 0.5, 0.5, H + 0.28, ridge, 0.05, WOOD_DARK);
-	return { parts, size: { w: 0.5, d: 0.5, h: ridge }, outline: rectOutline(0.5, 0.5) };
+	parts.push(cyl([0, H + 0.12, 0], 0.09, 0.16, '#c8a86a'));
+	parts.push(cyl([0, H + 0.21, 0], 0.11, 0.02, WOOD_DARK));
+	parts.push(box([0, H + 0.06, 0], [0.3, 0.02, 0.3], '#c8a86a'));
+	gableRoof(parts, 0.5, 0.5, H + 0.28, ridge, 0.06, WOOD_DARK);
+	roofTrim(parts, 0.5, 0.5, H + 0.28, ridge, 0.06, WOOD_PALE);
+	return { parts, size: { w: 0.52, d: 0.52, h: ridge }, outline: rectOutline(0.52, 0.52) };
 }
 
 function insectHotel(): Built {
@@ -939,12 +1287,29 @@ function insectHotel(): Built {
 		box([-0.2, 0.2, 0], [0.06, 0.4, 0.06], WOOD_DARK),
 		box([0.2, 0.2, 0], [0.06, 0.4, 0.06], WOOD_DARK),
 		box([0, 0.75, 0], [0.5, 0.72, 0.18], WOOD),
-		box([0, 0.55, 0.01], [0.42, 0.18, 0.16], '#c8a86a'),
-		box([0, 0.75, 0.01], [0.42, 0.18, 0.16], WOOD_DARK),
-		box([0, 0.95, 0.01], [0.42, 0.18, 0.16], WOOD_PALE),
-		box([0, 1.14, 0], [0.6, 0.04, 0.26], FALU, { tiltX: 0.2 })
+		box([0, 0.4, 0], [0.5, 0.04, 0.18], WOOD_DARK),
+		box([0, 0.66, 0], [0.46, 0.03, 0.17], WOOD_DARK),
+		box([0, 0.86, 0], [0.46, 0.03, 0.17], WOOD_DARK)
 	];
-	return { parts, size: { w: 0.6, d: 0.26, h: 1.18 }, outline: rectOutline(0.5, 0.2) };
+	// Cut canes in one compartment, cones in another, drilled blocks in the third.
+	for (let i = 0; i < 14; i++) {
+		const x = -0.19 + (i % 7) * 0.063;
+		const y = 0.5 + Math.floor(i / 7) * 0.07;
+		parts.push(cyl([x, y, 0.04], 0.045, 0.14, '#c8a86a', { tiltX: Math.PI / 2 }));
+	}
+	for (let i = 0; i < 6; i++) {
+		const x = -0.16 + (i % 3) * 0.16;
+		const y = 0.72 + Math.floor(i / 3) * 0.1;
+		parts.push(cone([x, y, 0.03], 0.11, 0.14, WOOD_DARK, { tiltX: -Math.PI / 2 }));
+	}
+	for (let i = 0; i < 8; i++) {
+		const x = -0.18 + (i % 4) * 0.12;
+		const y = 0.94 + Math.floor(i / 4) * 0.08;
+		parts.push(cyl([x, y, 0.05], 0.03, 0.12, EMBER, { tiltX: Math.PI / 2 }));
+	}
+	parts.push(box([0, 1.14, 0], [0.6, 0.04, 0.28], FALU, { tiltX: 0.2 }));
+	parts.push(box([0, 1.18, -0.12], [0.62, 0.05, 0.05], WOOD_DARK));
+	return { parts, size: { w: 0.62, d: 0.3, h: 1.22 }, outline: rectOutline(0.52, 0.22) };
 }
 
 const BUILDERS = new Map<string, Builder>([

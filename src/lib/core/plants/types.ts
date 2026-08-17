@@ -78,6 +78,19 @@ export type Trunk = {
 	stems: { x: number; z: number; lean: number }[];
 };
 
+/**
+ * One length of woody growth, from `a` to `b`, tapering from `ra` to `rb`. A trunk and the
+ * branches that leave it are the same thing, which is what lets the foliage hang off tips
+ * rather than float in a ball.
+ */
+export type Limb = {
+	a: { x: number; y: number; z: number };
+	b: { x: number; y: number; z: number };
+	ra: number;
+	rb: number;
+	colour: Hex;
+};
+
 /** The plan symbol, drawn from the same parameters that build the 3D form. */
 export type PlanIcon = {
 	/** Canopy outline in plan metres, centred on the plant. */
@@ -93,6 +106,8 @@ export type PlanIcon = {
 export type PlantForm = {
 	masses: Mass[];
 	trunk?: Trunk;
+	/** Trunk and branches as tapered lengths. Present instead of `trunk` on anything woody. */
+	limbs?: Limb[];
 	/** Overall canopy radius and height at this age, in metres. */
 	canopyR: number;
 	height: number;

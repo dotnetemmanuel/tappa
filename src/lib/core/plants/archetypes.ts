@@ -13,6 +13,7 @@ import {
 import type {
 	FormArchetype,
 	FormInput,
+	Limb,
 	Mass,
 	PlanIcon,
 	PlantForm,
@@ -63,7 +64,7 @@ type Ctx = {
 	bark: Hex;
 };
 
-type Build = { masses: Mass[]; trunk?: Trunk };
+type Build = { masses: Mass[]; trunk?: Trunk; limbs?: Limb[] };
 
 function blob(
 	kind: Mass['kind'],
@@ -95,73 +96,225 @@ function singleTrunk(height: number, radius: number, colour: Hex): Trunk {
 	return { height, radius, colour, stems: [{ x: 0, z: 0, lean: 0 }] };
 }
 
-function broadleafRound(c: Ctx): Build {
-	const trunkH = clamp(c.h - c.w * 0.95, c.h * 0.18, c.h * 0.5);
-	const crownH = c.h - trunkH;
-	const rx = c.w / 2;
-	const cy = trunkH + crownH / 2;
-	const masses = [blob('ellipsoid', 0, cy, 0, rx, crownH / 2, rx * 0.96, tint(c))];
-	const lumps = 3 + Math.floor(c.rng() * 3);
-	for (let i = 0; i < lumps; i++) {
-		const a = (i / lumps) * TAU + between(c.rng, -0.4, 0.4);
-		const d = between(c.rng, 0.5, 0.72) * rx;
-		const lr = between(c.rng, 0.3, 0.44) * rx;
-		const ly = cy + between(c.rng, -0.3, 0.34) * (crownH / 2);
+
+type Xyz = { x: number; y: number; z: number };
+
+/**
+ * A crown grown on a skeleton: limbs leave the trunk at staggered heights and angles, split
+ * once or twice, and every tip carries a handful of small clumps. The broken outline and the
+ * gaps between clumps are what stop a tree reading as a ball on a stick.
+ */
+function crown(
+	c: Ctx,
+	o: {
+		/** Where the trunk ends and the crown starts. */
+		base: number;
+		/** Crown height and half spread, in metres. */
+		height: number;
+		spread: number;
+		/** How far the tips lean out, 0 upright to 1 flat. */
+		reach?: number;
+		/** Roughly how many clumps, scaled down on a small plant. */
+		density?: number;
+		/** Clump radius as a share of the spread. */
+		clump?: number;
+		/** Pulls the crown's mass down the tips, for a weeping form. */
+		droop?: number;
+	}
+): { masses: Mass[]; limbs: Limb[] } {
+	const masses: Mass[] = [];
+	const limbs: Limb[] = [];
+	const reach = o.reach ?? 0.62;
+	const clumpR = Math.max(0.09, o.spread * (o.clump ?? 0.34));
+	const wanted = Math.round((o.density ?? 14) * clamp(o.spread / 1.6, 0.35, 1.6));
+	const arms = clamp(Math.round(wanted / 3), 2, 6);
+	const top: Xyz = { x: 0, y: o.base, z: 0 };
+
+	for (let i = 0; i < arms; i++) {
+		const a = (i / arms) * TAU + between(c.rng, -0.35, 0.35);
+		const from: Xyz = {
+			x: 0,
+			y: o.base - o.height * between(c.rng, 0, 0.22),
+			z: 0
+		};
+		const len = o.height * between(c.rng, 0.45, 0.78);
+		const out = o.spread * reach * between(c.rng, 0.55, 1);
+		const tip: Xyz = {
+			x: Math.cos(a) * out,
+			y: from.y + len,
+			z: Math.sin(a) * out
+		};
+		const r = stemRadius(c.h) * between(c.rng, 0.5, 0.75);
+		limbs.push({ a: from, b: tip, ra: r * 1.6, rb: r * 0.7, colour: c.bark });
+
+		const twigs = 2 + Math.floor(c.rng() * 2);
+		for (let k = 0; k < twigs; k++) {
+			const ta = a + between(c.rng, -0.9, 0.9);
+			const tout = out + o.spread * between(c.rng, 0.1, 0.34);
+			const drop = (o.droop ?? 0) * o.height * between(c.rng, 0.2, 0.7);
+			const end: Xyz = {
+				x: Math.cos(ta) * tout,
+				y: tip.y + o.height * between(c.rng, -0.05, 0.28) - drop,
+				z: Math.sin(ta) * tout
+			};
+			limbs.push({ a: tip, b: end, ra: r * 0.7, rb: r * 0.35, colour: c.bark });
+			const perTip = 1 + Math.floor(c.rng() * 2);
+			for (let m = 0; m < perTip; m++) {
+				const rr = clumpR * between(c.rng, 0.7, 1.15);
+				masses.push(
+					blob(
+						'ellipsoid',
+						end.x + between(c.rng, -0.4, 0.4) * clumpR,
+						end.y + between(c.rng, -0.35, 0.5) * clumpR,
+						end.z + between(c.rng, -0.4, 0.4) * clumpR,
+						rr,
+						rr * between(c.rng, 0.72, 0.95),
+						rr,
+						lit(c, (end.y - o.base) / Math.max(0.2, o.height))
+					)
+				);
+			}
+		}
+	}
+
+	// A little mass over the middle, or the crown reads as a ring seen from above.
+	const inner = Math.max(1, Math.round(arms / 2));
+	for (let i = 0; i < inner; i++) {
+		const rr = clumpR * between(c.rng, 0.8, 1.2);
+		const a = c.rng() * TAU;
+		const d = o.spread * between(c.rng, 0, 0.3);
 		masses.push(
-			blob('ellipsoid', Math.cos(a) * d, ly, Math.sin(a) * d, lr, lr * 0.85, lr, tint(c))
+			blob(
+				'ellipsoid',
+				Math.cos(a) * d,
+				o.base + o.height * between(c.rng, 0.35, 0.8),
+				Math.sin(a) * d,
+				rr,
+				rr * 0.85,
+				rr,
+				lit(c, between(c.rng, 0.4, 0.9))
+			)
 		);
 	}
-	return { masses, trunk: singleTrunk(trunkH, stemRadius(c.h), c.bark) };
+	void top;
+	return { masses, limbs };
+}
+
+/** Foliage catches the light on top and sits in its own shade underneath. */
+function lit(c: Ctx, t: number): Hex {
+	return shade(c.leaf, (clamp(t, 0, 1) - 0.45) * 0.26 + between(c.rng, -0.05, 0.05));
+}
+
+/** A trunk that tapers, which is most of the difference between a tree and a pole. */
+function trunkLimb(c: Ctx, height: number, radius: number, lean = 0): Limb {
+	return {
+		a: { x: 0, y: 0, z: 0 },
+		b: { x: Math.sin(lean) * height * 0.12, y: height, z: 0 },
+		ra: radius * 1.25,
+		rb: radius * 0.8,
+		colour: c.bark
+	};
+}
+
+function broadleafRound(c: Ctx): Build {
+	const trunkH = clamp(c.h - c.w * 0.95, c.h * 0.18, c.h * 0.5);
+	const r = stemRadius(c.h);
+	const built = crown(c, {
+		base: trunkH,
+		height: c.h - trunkH,
+		spread: c.w / 2,
+		reach: 0.6,
+		density: 16
+	});
+	return {
+		masses: built.masses,
+		limbs: [trunkLimb(c, trunkH, r), ...built.limbs],
+		trunk: singleTrunk(trunkH, r, c.bark)
+	};
 }
 
 function broadleafSpreading(c: Ctx): Build {
 	const trunkH = clamp(c.h - c.w * 0.6, c.h * 0.2, c.h * 0.45);
-	const crownH = c.h - trunkH;
-	const masses = [
-		blob('ellipsoid', 0, trunkH + crownH * 0.45, 0, c.w * 0.34, crownH * 0.42, c.w * 0.33, tint(c))
-	];
-	const arms = 3 + Math.floor(c.rng() * 2);
-	for (let i = 0; i < arms; i++) {
-		const a = (i / arms) * TAU + between(c.rng, -0.3, 0.3);
-		const d = between(c.rng, 0.24, 0.34) * c.w;
-		const r = between(c.rng, 0.26, 0.34) * c.w;
-		const ly = trunkH + crownH * between(c.rng, 0.3, 0.72);
-		masses.push(blob('ellipsoid', Math.cos(a) * d, ly, Math.sin(a) * d, r, r * 0.72, r, tint(c)));
-	}
-	return { masses, trunk: singleTrunk(trunkH, stemRadius(c.h), c.bark) };
+	const r = stemRadius(c.h);
+	const built = crown(c, {
+		base: trunkH,
+		height: c.h - trunkH,
+		spread: c.w / 2,
+		reach: 0.85,
+		density: 18,
+		clump: 0.3
+	});
+	return {
+		masses: built.masses,
+		limbs: [trunkLimb(c, trunkH, r), ...built.limbs],
+		trunk: singleTrunk(trunkH, r, c.bark)
+	};
 }
 
 function columnar(c: Ctx): Build {
 	const trunkH = c.h * 0.08;
 	const crownH = c.h - trunkH;
 	const rx = c.w / 2;
-	const masses = [blob('ellipsoid', 0, trunkH + crownH / 2, 0, rx, crownH / 2, rx, tint(c))];
-	for (let i = 0; i < 2; i++) {
-		const a = c.rng() * TAU;
-		const d = rx * between(c.rng, 0.4, 0.6);
-		const r = rx * between(c.rng, 0.5, 0.7);
-		const ly = trunkH + crownH * between(c.rng, 0.25, 0.75);
-		masses.push(blob('ellipsoid', Math.cos(a) * d, ly, Math.sin(a) * d, r, r * 1.4, r, tint(c)));
+	const r = stemRadius(c.h) * 0.7;
+	const masses: Mass[] = [];
+	const limbs: Limb[] = [
+		{ a: { x: 0, y: 0, z: 0 }, b: { x: 0, y: c.h * 0.86, z: 0 }, ra: r * 1.3, rb: r * 0.4, colour: c.bark }
+	];
+	// A column is a tall spindle of clumps around one stem, not one stretched ball.
+	const rows = clamp(Math.round(crownH / Math.max(0.35, rx * 0.9)), 3, 9);
+	for (let i = 0; i < rows; i++) {
+		const t = (i + 0.5) / rows;
+		const ring = 2 + Math.floor(c.rng() * 2);
+		const rowR = rx * (0.55 + 0.45 * Math.sin(Math.PI * clamp(t * 1.05, 0, 1)));
+		for (let k = 0; k < ring; k++) {
+			const a = (k / ring) * TAU + i * 1.1 + between(c.rng, -0.3, 0.3);
+			const rr = rowR * between(c.rng, 0.5, 0.75);
+			masses.push(
+				blob(
+					'ellipsoid',
+					Math.cos(a) * rowR * 0.5,
+					trunkH + crownH * t,
+					Math.sin(a) * rowR * 0.5,
+					rr,
+					rr * 1.15,
+					rr,
+					lit(c, t)
+				)
+			);
+		}
 	}
-	return { masses, trunk: singleTrunk(trunkH, stemRadius(c.h) * 0.7, c.bark) };
+	return { masses, limbs, trunk: singleTrunk(trunkH, r, c.bark) };
 }
 
 function weeping(c: Ctx): Build {
-	const trunkH = c.h * 0.38;
-	const rx = c.w / 2;
-	const domeY = c.h * 0.68;
-	const masses = [blob('ellipsoid', 0, domeY, 0, rx, c.h * 0.26, rx * 0.95, tint(c))];
+	const trunkH = c.h * 0.42;
+	const r = stemRadius(c.h);
+	const built = crown(c, {
+		base: trunkH,
+		height: c.h - trunkH,
+		spread: c.w / 2,
+		reach: 0.9,
+		density: 16,
+		clump: 0.26,
+		droop: 0.55
+	});
+	// Curtains of growth hanging off the outer tips, which is what a weeping habit is.
 	const veils = 5 + Math.floor(c.rng() * 3);
+	const rx = c.w / 2;
 	for (let i = 0; i < veils; i++) {
 		const a = (i / veils) * TAU + between(c.rng, -0.25, 0.25);
-		const d = rx * between(c.rng, 0.62, 0.92);
-		const drop = between(c.rng, 0.18, 0.3) * c.h;
-		const ly = domeY - c.h * 0.12 - drop / 2;
-		masses.push(
-			blob('ellipsoid', Math.cos(a) * d, ly, Math.sin(a) * d, rx * 0.2, drop / 2, rx * 0.2, tint(c))
+		const d = rx * between(c.rng, 0.6, 0.95);
+		const drop = between(c.rng, 0.2, 0.34) * c.h;
+		const ly = c.h * 0.7 - drop / 2;
+		built.masses.push(
+			blob('ellipsoid', Math.cos(a) * d, ly, Math.sin(a) * d, rx * 0.14, drop / 2, rx * 0.14, lit(c, 0.3))
 		);
 	}
-	return { masses, trunk: singleTrunk(trunkH, stemRadius(c.h), c.bark) };
+	return {
+		masses: built.masses,
+		limbs: [trunkLimb(c, trunkH, r), ...built.limbs],
+		trunk: singleTrunk(trunkH, r, c.bark)
+	};
 }
 
 function coniferSpire(c: Ctx): Build {
@@ -209,45 +362,81 @@ function multiStem(c: Ctx): Build {
 	const trunkH = c.h * 0.42;
 	const crownH = c.h - trunkH;
 	const masses: Mass[] = [];
+	const limbs: Limb[] = [];
 	const stems: Trunk['stems'] = [];
 	const base = c.w * 0.06;
+	const r = stemRadius(c.h) * 0.7;
 	for (let i = 0; i < n; i++) {
 		const a = (i / n) * TAU + between(c.rng, -0.3, 0.3);
 		const lean = between(c.rng, 0.1, 0.24);
 		stems.push({ x: Math.cos(a) * base, z: Math.sin(a) * base, lean });
-		const d = c.w * between(c.rng, 0.2, 0.32);
-		const r = c.w * between(c.rng, 0.26, 0.34);
-		const ly = trunkH + crownH * between(c.rng, 0.35, 0.62);
-		masses.push(blob('ellipsoid', Math.cos(a) * d, ly, Math.sin(a) * d, r, r * 0.9, r, tint(c)));
+		// Each stem leans out and carries its own share of the crown, which is the habit.
+		const out = c.w * between(c.rng, 0.16, 0.28);
+		const tip = {
+			x: Math.cos(a) * out,
+			y: trunkH + crownH * between(c.rng, 0.1, 0.3),
+			z: Math.sin(a) * out
+		};
+		limbs.push({
+			a: { x: Math.cos(a) * base, y: 0, z: Math.sin(a) * base },
+			b: tip,
+			ra: r * 1.2,
+			rb: r * 0.6,
+			colour: c.bark
+		});
+		const part = crown(c, {
+			base: tip.y,
+			height: crownH * 0.8,
+			spread: (c.w / 2) * 0.55,
+			reach: 0.8,
+			density: 8,
+			clump: 0.4
+		});
+		for (const m of part.masses) {
+			masses.push({ ...m, at: { x: m.at.x + tip.x, y: m.at.y, z: m.at.z + tip.z } });
+		}
+		for (const l of part.limbs) {
+			limbs.push({
+				...l,
+				a: { x: l.a.x + tip.x, y: l.a.y, z: l.a.z + tip.z },
+				b: { x: l.b.x + tip.x, y: l.b.y, z: l.b.z + tip.z }
+			});
+		}
 	}
-	return {
-		masses,
-		trunk: { height: trunkH, radius: stemRadius(c.h) * 0.7, colour: c.bark, stems }
-	};
+	return { masses, limbs, trunk: { height: trunkH, radius: r, colour: c.bark, stems } };
 }
 
 function shrubMound(c: Ctx): Build {
 	const rx = c.w / 2;
-	const masses = [blob('mound', 0, c.h * 0.45, 0, rx, c.h * 0.55, rx * 0.96, tint(c))];
-	const lumps = 3 + Math.floor(c.rng() * 2);
-	for (let i = 0; i < lumps; i++) {
-		const a = (i / lumps) * TAU + between(c.rng, -0.45, 0.45);
-		const d = rx * between(c.rng, 0.3, 0.5);
-		const r = rx * between(c.rng, 0.4, 0.58);
-		masses.push(
-			blob(
-				'mound',
-				Math.cos(a) * d,
-				c.h * between(c.rng, 0.3, 0.45),
-				Math.sin(a) * d,
-				r,
-				c.h * 0.42,
-				r,
-				tint(c)
-			)
-		);
+	const masses: Mass[] = [];
+	const limbs: Limb[] = [];
+	// Many short stems from the base, each carrying a few clumps: low, dense, no single ball.
+	const stems = 4 + Math.floor(c.rng() * 4);
+	const r = Math.max(0.008, c.h * 0.02);
+	for (let i = 0; i < stems; i++) {
+		const a = (i / stems) * TAU + between(c.rng, -0.4, 0.4);
+		const out = rx * between(c.rng, 0.25, 0.62);
+		const top = c.h * between(c.rng, 0.55, 0.95);
+		const tip = { x: Math.cos(a) * out, y: top, z: Math.sin(a) * out };
+		limbs.push({ a: { x: 0, y: 0, z: 0 }, b: tip, ra: r, rb: r * 0.5, colour: c.bark });
+		const clumps = 2 + Math.floor(c.rng() * 2);
+		for (let k = 0; k < clumps; k++) {
+			const rr = rx * between(c.rng, 0.24, 0.4);
+			masses.push(
+				blob(
+					'ellipsoid',
+					tip.x + between(c.rng, -0.5, 0.5) * rr,
+					Math.max(rr * 0.6, tip.y + between(c.rng, -0.5, 0.25) * rr),
+					tip.z + between(c.rng, -0.5, 0.5) * rr,
+					rr,
+					rr * between(c.rng, 0.65, 0.85),
+					rr,
+					lit(c, tip.y / Math.max(0.2, c.h))
+				)
+			);
+		}
 	}
-	return { masses };
+	return { masses, limbs };
 }
 
 function hedgeRun(c: Ctx): Build {
@@ -258,44 +447,68 @@ function hedgeRun(c: Ctx): Build {
 }
 
 function perennialClump(c: Ctx): Build {
-	const n = 3 + Math.floor(c.rng() * 4);
 	const rx = c.w / 2;
-	const masses = [blob('ellipsoid', 0, c.h * 0.5, 0, rx * 0.5, c.h * 0.5, rx * 0.5, tint(c))];
-	for (let i = 0; i < n; i++) {
-		const a = (i / n) * TAU + between(c.rng, -0.4, 0.4);
-		const d = rx * between(c.rng, 0.35, 0.62);
-		const r = rx * between(c.rng, 0.32, 0.5);
-		const hy = c.h * between(c.rng, 0.72, 1);
-		masses.push(blob('ellipsoid', Math.cos(a) * d, hy / 2, Math.sin(a) * d, r, hy / 2, r, tint(c)));
+	const masses: Mass[] = [];
+	const limbs: Limb[] = [];
+	// A crown of leaves at the base and flower stems standing out of it.
+	const leaves = 5 + Math.floor(c.rng() * 4);
+	for (let i = 0; i < leaves; i++) {
+		const a = (i / leaves) * TAU + between(c.rng, -0.3, 0.3);
+		const d = rx * between(c.rng, 0.2, 0.55);
+		const r = rx * between(c.rng, 0.3, 0.46);
+		masses.push(
+			blob(
+				'ellipsoid',
+				Math.cos(a) * d,
+				c.h * between(c.rng, 0.22, 0.4),
+				Math.sin(a) * d,
+				r,
+				c.h * between(c.rng, 0.22, 0.34),
+				r,
+				lit(c, 0.35)
+			)
+		);
 	}
-	return { masses };
+	const stems = 3 + Math.floor(c.rng() * 3);
+	for (let i = 0; i < stems; i++) {
+		const a = c.rng() * TAU;
+		const d = rx * between(c.rng, 0.1, 0.4);
+		const top = c.h * between(c.rng, 0.8, 1);
+		const tip = { x: Math.cos(a) * d, y: top, z: Math.sin(a) * d };
+		limbs.push({
+			a: { x: tip.x * 0.4, y: c.h * 0.15, z: tip.z * 0.4 },
+			b: tip,
+			ra: Math.max(0.006, c.h * 0.012),
+			rb: Math.max(0.004, c.h * 0.008),
+			colour: shade(c.leaf, -0.28)
+		});
+		const rr = rx * between(c.rng, 0.14, 0.22);
+		masses.push(blob('ellipsoid', tip.x, tip.y, tip.z, rr, rr * 0.8, rr, lit(c, 0.9)));
+	}
+	return { masses, limbs };
 }
 
 function grassTuft(c: Ctx): Build {
 	const rx = c.w / 2;
 	const masses = [
-		blob('tuft', 0, c.h * 0.12, 0, rx * 0.45, c.h * 0.14, rx * 0.45, shade(c.leaf, -0.1))
+		blob('tuft', 0, c.h * 0.1, 0, rx * 0.42, c.h * 0.12, rx * 0.42, shade(c.leaf, -0.14))
 	];
-	const blades = 4 + Math.floor(c.rng() * 3);
+	const limbs: Limb[] = [];
+	// Real blades leaning out of the crown, rather than a few flat cards.
+	const blades = 10 + Math.floor(c.rng() * 8);
 	for (let i = 0; i < blades; i++) {
-		const a = (i / blades) * TAU + between(c.rng, -0.25, 0.25);
-		const lean = between(c.rng, 0.3, 0.55);
-		const bh = c.h * between(c.rng, 0.78, 1);
-		masses.push(
-			blob(
-				'fan',
-				Math.cos(a) * rx * lean * 0.5,
-				bh * 0.55,
-				Math.sin(a) * rx * lean * 0.5,
-				rx * 0.9,
-				bh * 0.5,
-				rx * 0.18,
-				tint(c),
-				a
-			)
-		);
+		const a = (i / blades) * TAU + between(c.rng, -0.3, 0.3);
+		const lean = between(c.rng, 0.25, 0.7);
+		const bh = c.h * between(c.rng, 0.65, 1.05);
+		limbs.push({
+			a: { x: 0, y: c.h * 0.05, z: 0 },
+			b: { x: Math.cos(a) * rx * lean, y: bh, z: Math.sin(a) * rx * lean },
+			ra: Math.max(0.005, c.h * 0.022),
+			rb: 0.001,
+			colour: shade(c.leaf, between(c.rng, -0.12, 0.12))
+		});
 	}
-	return { masses };
+	return { masses, limbs };
 }
 
 function groundcoverMat(c: Ctx): Build {
@@ -469,9 +682,11 @@ export function plantForm(input: FormInput): PlantForm {
 	}
 	const trunkR = built.trunk ? Math.max(0.03, built.trunk.radius * 1.6) : 0;
 	const accent = accentOf(sp, input.month);
+	for (const l of built.limbs ?? []) height = Math.max(height, l.a.y, l.b.y);
 	return {
 		masses: built.masses,
 		...(built.trunk ? { trunk: built.trunk } : {}),
+		...(built.limbs && built.limbs.length > 0 ? { limbs: built.limbs } : {}),
 		canopyR,
 		height,
 		icon: iconOf(built.masses, rng, planFill, trunkR, bare),
