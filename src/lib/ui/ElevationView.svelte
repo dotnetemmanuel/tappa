@@ -43,6 +43,8 @@
 	let ghost = $state<{ u: number; z: number } | null>(null);
 	let hot = $state<EntityId | null>(null);
 	let onLine = $state(false);
+	/** A short line at the pointer saying what a drag here does, and what it is doing now. */
+	let tip = $state<{ x: number; y: number; text: string; live: boolean } | null>(null);
 
 	const FACINGS: Facing[] = ['s', 'e', 'n', 'w'];
 
@@ -157,6 +159,7 @@
 		dragging = { edit: start(aim.target), from: e.clientY, u: aim.u, side: aim.side };
 		grab = { side: aim.side, u: aim.u, z: aim.z, at: { x: 0, y: 0 }, spot: null };
 		ghost = null;
+		showTip(e, r, liveText(aim.side, aim.z, 0));
 	}
 
 	function pointerMove(e: PointerEvent): void {
@@ -168,6 +171,7 @@
 			}
 			const now = handleAt(app.doc, app.field, app.facing, dragging.u, dragging.side);
 			grab = now;
+			showTip(e, r, liveText(dragging.side, now.z, now.z - dragging.edit.startZ));
 			return;
 		}
 		if (pan) {
@@ -183,6 +187,34 @@
 			aim && aim.side === 'along' && !aim.vertex
 				? ghostAt(app.doc, app.field, app.facing, aim.u)
 				: null;
+		if (!aim) tip = null;
+		else showTip(e, r, hoverText(aim.side, !!aim.vertex, aim.z));
+	}
+
+	const metres = (z: number): string =>
+		`${z < 0 ? '−' : ''}${Math.abs(z).toFixed(2).replace('.', ',')} m`;
+
+	function hoverText(side: SlopeHandle['side'], onVertex: boolean, z: number): string {
+		if (side !== 'along') return `Dra för att luta hela tomten · nu ${metres(z)}`;
+		if (onVertex) return `Dra för att ändra marken här · nu ${metres(z)}`;
+		return `Klicka för att sätta en marknivå här · ${metres(z)}`;
+	}
+
+	function liveText(side: SlopeHandle['side'], z: number, delta: number): string {
+		const change =
+			Math.abs(delta) < 0.005
+				? ''
+				: ` (${delta > 0 ? '+' : '−'}${Math.abs(delta).toFixed(2).replace('.', ',')})`;
+		return `${side === 'along' ? 'Marken här' : 'Lutar tomten'} ${metres(z)}${change}`;
+	}
+
+	function showTip(e: PointerEvent, r: DOMRect, text: string): void {
+		tip = {
+			x: Math.min(Math.max(8, e.clientX - r.left + 14), r.width - 260),
+			y: Math.min(Math.max(8, e.clientY - r.top - 34), r.height - 40),
+			text,
+			live: dragging !== null
+		};
 	}
 
 	function pointerUp(e: PointerEvent): void {
@@ -206,6 +238,7 @@
 		}
 		pan = null;
 		grab = null;
+		tip = null;
 		canvas.releasePointerCapture?.(e.pointerId);
 	}
 
@@ -247,9 +280,21 @@
 			ghost = null;
 			hot = null;
 			onLine = false;
+			tip = null;
 		}}
 		onwheel={wheel}
 	></canvas>
+
+	{#if tip}
+		<div
+			class="pointer-events-none absolute rounded border border-line bg-bark/95 px-2 py-1 text-[11px] whitespace-nowrap text-chalk"
+			class:border-seed={tip.live}
+			style:left="{tip.x}px"
+			style:top="{tip.y}px"
+		>
+			{tip.text}
+		</div>
+	{/if}
 
 	{#if editing}
 		<input
