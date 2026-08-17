@@ -135,3 +135,51 @@ describe('heightAt', () => {
 		expect(heightAt(null, 12, -30)).toBe(0);
 	});
 });
+
+describe('height points strung out along one line', () => {
+	/** Every point the side view makes lands on the same section, so this is the normal case. */
+	const onALine = (zs: [number, number, number]): Doc => {
+		const doc = createDoc();
+		zs.forEach((z, i) => doc.entities.push(makeSpot({ x: i * 10, y: 10 }, z)));
+		return doc;
+	};
+
+	it('digs the dip you put in the middle of them', () => {
+		const f = must(buildField(onALine([0, -2, 0])));
+		expect(heightAt(f, 10, 10)).toBeCloseTo(-2, 2);
+		expect(heightAt(f, 0, 10)).toBeCloseTo(0, 2);
+		expect(heightAt(f, 20, 10)).toBeCloseTo(0, 2);
+	});
+
+	it('carries the dip out across the line rather than inventing a crossfall', () => {
+		const f = must(buildField(onALine([0, -2, 0])));
+		// Six metres out to either side the dip has eased off a little, and no further.
+		for (const y of [4, 10, 16]) {
+			expect(heightAt(f, 10, y)).toBeLessThan(-1.5);
+			expect(heightAt(f, 10, y)).toBeGreaterThan(-2.5);
+		}
+	});
+
+	it('keeps its head when a point sits a few centimetres off the line', () => {
+		const doc = createDoc();
+		doc.entities.push(makeSpot({ x: 0, y: 10 }, 0));
+		doc.entities.push(makeSpot({ x: 7, y: 10 }, -0.5));
+		doc.entities.push(makeSpot({ x: 12, y: 9.85 }, -1.5));
+		doc.entities.push(makeSpot({ x: 20, y: 10 }, -2));
+		const f = must(buildField(doc));
+		// The plot is 20 m deep; before, a 15 cm sideways offset threw its edges hundreds of metres.
+		const onTheLine = heightAt(f, 10, 10);
+		for (const y of [0, 20]) {
+			expect(Math.abs(heightAt(f, 10, y) - onTheLine)).toBeLessThan(0.5);
+		}
+		expect(heightAt(f, 12, 9.85)).toBeCloseTo(-1.5, 2);
+	});
+
+	it('still passes through every height it was given', () => {
+		const doc = createDoc();
+		const zs = [0, 0, -2, -2];
+		zs.forEach((z, i) => doc.entities.push(makeSpot({ x: 2 + i * 5, y: 10 }, z)));
+		const f = must(buildField(doc));
+		zs.forEach((z, i) => expect(heightAt(f, 2 + i * 5, 10)).toBeCloseTo(z, 2));
+	});
+});

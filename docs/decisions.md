@@ -74,6 +74,18 @@ Evaluating a formula per query would cost minutes in the sun study, and a triang
 Moving least squares: at each cell a plane through all the height points, weighted by one over distance to the fourth, which is exact at every point and reproduces a plane from three of them.
 One global plane plus corrections was tried first and coupled the whole plot, so raising one part by five metres leaned the far end by most of a metre; this leans it by a tenth.
 
+## A slope is only read in a direction the points spread out along
+Each local fit splits into the two directions the points spread along, and a slope is ignored below a twentieth of the data's own length and trusted in full at a quarter, fading in between.
+Every point the side view makes lands on the same section line, and reading a crossfall off a two centimetre baseline threw the plot edges hundreds of metres up and down, which is what the humps in the side view were.
+
+## The section line follows the plot boundary, or the height points, never the whole drawing
+It used to be the middle of the drawing's extent, so planting a tree at the back edge moved the line, stranded every height handle the user had placed, and left later points a few centimetres off the earlier ones.
+It now comes from the boundary when there is one and from the median depth of the height points when there is not, rounded to five centimetres so a nudged corner cannot shift it.
+
+## A crossfall read close to the section line is deliberately under-reported
+A point a metre or two off the line contributes about a sixth of the crossfall it implies, because the alternative is reading a slope off a two centimetre baseline and extrapolating it across the plot.
+Real cross-slope needs points well off the line, which is what the plan view is for.
+
 ## The two ends of the side view tilt the plot, everything else is local
 Dragging an end ramps every height point about the far end, which is the move you want when the plot simply slopes; dragging anywhere else moves that one point.
 Without the split there is no way to say "the whole thing falls a bit more" without dragging every point by hand.

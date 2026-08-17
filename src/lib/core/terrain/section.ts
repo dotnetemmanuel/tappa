@@ -1,6 +1,6 @@
 import { docBounds } from '../doc/doc.js';
 import type { Doc, EntityId } from '../doc/types.js';
-import type { Vec2 } from '../geom/vec2.js';
+import { rectFromPoints, type Rect, type Vec2 } from '../geom/vec2.js';
 import { heightAt, type HeightField } from './field.js';
 import { groundUnder } from './query.js';
 
@@ -106,10 +106,11 @@ export function sectionVertices(doc: Doc, facing: Facing): SectionVertex[] {
 	const b = docBounds(doc);
 	if (!Number.isFinite(b.min.x) || b.max.x < b.min.x) return [];
 	const reach = 0.75;
+	const depth = sectionDepth(doc, facing);
 	const out: SectionVertex[] = [];
 	for (const e of doc.entities) {
 		if (e.k !== 'spot') continue;
-		const on = sectionPoint(doc, facing, uOf(facing, e.at));
+		const on = fromView(facing, uOf(facing, e.at), depth);
 		const offset = Math.hypot(e.at.x - on.x, e.at.y - on.y);
 		if (offset > reach) continue;
 		out.push({ id: e.id, u: uOf(facing, e.at), z: e.z, at: e.at, offset });
@@ -131,12 +132,42 @@ export function tiltFactor(facing: Facing, grabU: number, pivotU: number, at: Ve
 	return (uOf(facing, at) - pivotU) / span;
 }
 
-/** Where the section line crosses a position in the view: the middle of the plot, in plan. */
+/**
+ * Where the section line crosses a position in the view: the middle of the plot boundary,
+ * falling back to everything drawn only when there is no boundary yet. Taken from the drawing
+ * as a whole it moved every time anything was drawn, which quietly stranded every handle the
+ * user had already placed and left later points a few centimetres off the earlier ones.
+ */
 export function sectionPoint(doc: Doc, facing: Facing, u: number): Vec2 {
-	const b = docBounds(doc);
+	return fromView(facing, u, sectionDepth(doc, facing));
+}
+
+/**
+ * How far into the plot the section runs. Worked out once and passed around, because it sorts
+ * the height points and the painter asks for a point on the line a couple of hundred times a frame.
+ */
+export function sectionDepth(doc: Doc, facing: Facing): number {
 	const acrossPlan = facing === 's' || facing === 'n';
-	const mid = acrossPlan ? (b.min.y + b.max.y) / 2 : (b.min.x + b.max.x) / 2;
-	return fromView(facing, u, Number.isFinite(mid) ? mid : 0);
+	let mid: number;
+	if (doc.plot.boundary.length >= 3) {
+		const b = rectFromPoints(doc.plot.boundary);
+		mid = acrossPlan ? (b.min.y + b.max.y) / 2 : (b.min.x + b.max.x) / 2;
+	} else {
+		// No boundary yet: the height points themselves hold the line, since anything else
+		// drawn would move it and strand every handle already placed.
+		const depths = doc.entities
+			.filter((e) => e.k === 'spot')
+			.map((e) => (acrossPlan ? e.at.y : e.at.x))
+			.sort((p, q) => p - q);
+		mid = depths.length > 0 ? depths[Math.floor(depths.length / 2)] : 0;
+	}
+	// Rounded, so a boundary nudged by a centimetre does not shift the line the points sit on.
+	return Number.isFinite(mid) ? Math.round(mid * 20) / 20 : 0;
+}
+
+/** The plot itself when it has a boundary, otherwise everything drawn. */
+export function plotRect(doc: Doc): Rect {
+	return doc.plot.boundary.length >= 3 ? rectFromPoints(doc.plot.boundary) : docBounds(doc);
 }
 
 /** The ground along the middle of the plot, which is the line the handles ride on. */
@@ -149,9 +180,10 @@ export function sectionProfile(
 ): Sample[] {
 	const out: Sample[] = [];
 	const columns = 160;
+	const depth = sectionDepth(doc, facing);
 	for (let i = 0; i <= columns; i++) {
 		const u = uMin + ((uMax - uMin) * i) / columns;
-		const p = sectionPoint(doc, facing, u);
+		const p = fromView(facing, u, depth);
 		out.push({ u, z: heightAt(field, p.x, p.y) });
 	}
 	return out;

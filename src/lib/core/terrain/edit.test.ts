@@ -228,3 +228,77 @@ describe('what a drag does to the house you can see', () => {
 		expect(exposedBase(doc)).toBeCloseTo(before, 1);
 	});
 });
+
+describe('where the pins land', () => {
+	it('keeps them inside the plot', () => {
+		const doc = plot();
+		const edit = groundEdit(doc, buildField(doc), 's', { kind: 'point', u: 1 });
+		for (const spot of edit.create) {
+			expect(spot.at.x).toBeGreaterThanOrEqual(0);
+			expect(spot.at.x).toBeLessThanOrEqual(20);
+		}
+	});
+
+	it('hangs them off the point that moves, not off the pointer', () => {
+		const doc = plot();
+		doc.entities.push(makeSpot({ x: 12, y: 10 }, -1.2));
+		const edit = groundEdit(doc, buildField(doc), 's', { kind: 'point', u: 13.2 });
+		// The grab snaps back to the point at 12, so its pins sit at 7 and 17, not 8.2 and 18.2.
+		expect(edit.create.map((s) => Math.round(s.at.x)).sort((a, b) => a - b)).toEqual([7, 17]);
+	});
+});
+
+describe('a plot only a few metres across', () => {
+	const small = (): Doc => {
+		const doc = createDoc();
+		doc.plot.boundary = [
+			{ x: 0, y: 0 },
+			{ x: 2.5, y: 0 },
+			{ x: 2.5, y: 2.5 },
+			{ x: 0, y: 2.5 }
+		];
+		doc.entities.push(makeSpot({ x: 1.25, y: 1.25 }, 0));
+		return doc;
+	};
+
+	it('moves the end exactly as far as the drag, not twice as far', () => {
+		const doc = small();
+		const field = buildField(doc);
+		const [, right] = slopeHandles(doc, field, 's');
+		drag(doc, groundEdit(doc, field, 's', { kind: 'tilt', side: 'right' }), -1);
+		expect(handleAt(doc, buildField(doc), 's', right.u).z).toBeCloseTo(right.z - 1, 1);
+	});
+
+	it('holds the far end still even when a point sits near it', () => {
+		const doc = plot();
+		doc.entities.push(makeSpot({ x: 1.4, y: 10 }, 0));
+		const field = buildField(doc);
+		const [left, right] = slopeHandles(doc, field, 's');
+		drag(doc, groundEdit(doc, field, 's', { kind: 'tilt', side: 'right' }), -1);
+		const after = buildField(doc);
+		expect(handleAt(doc, after, 's', left.u).z).toBeCloseTo(left.z, 1);
+		expect(handleAt(doc, after, 's', right.u).z).toBeCloseTo(right.z - 1, 1);
+	});
+
+	it('offers the height that is written on the handle', () => {
+		const doc = small();
+		const field = buildField(doc);
+		const [, right] = slopeHandles(doc, field, 's');
+		expect(groundEdit(doc, field, 's', { kind: 'tilt', side: 'right' }).startZ).toBeCloseTo(
+			right.z,
+			2
+		);
+	});
+});
+
+describe('the height a typed value is measured against', () => {
+	it('is the height point itself, not the line beside it', () => {
+		const doc = plot();
+		const off = makeSpot({ x: 12, y: 10.7 }, -1.35);
+		doc.entities.push(off);
+		const edit = groundEdit(doc, buildField(doc), 's', { kind: 'point', u: 12 });
+		expect(edit.startZ).toBeCloseTo(-1.35, 6);
+		// Typing -2,00 has to land on -2,00, not on -2,01.
+		expect(edit.apply(-2 - edit.startZ).spots[0].z).toBeCloseTo(-2, 6);
+	});
+});

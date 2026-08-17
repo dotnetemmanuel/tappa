@@ -5,7 +5,15 @@ import { centroid } from '../geom/polygon.js';
 import type { Vec2 } from '../geom/vec2.js';
 import { heightAt, type HeightField } from './field.js';
 import { lowestUnder } from './query.js';
-import { handleAt, sectionPoint, sectionVertices, slopeHandles, tiltFactor, uOf } from './section.js';
+import {
+	handleAt,
+	plotRect,
+	sectionPoint,
+	sectionVertices,
+	slopeHandles,
+	tiltFactor,
+	uOf
+} from './section.js';
 import type { Facing } from './section.js';
 
 /** What a press on the ground line in the side view means. */
@@ -57,8 +65,9 @@ export function groundEdit(
 
 /** Nothing else in the document moves: one height point does, and the ground follows it. */
 function pointEdit(doc: Doc, field: HeightField | null, facing: Facing, u: number): GroundEdit {
-	const create = pins(doc, field, facing, u);
 	const near = nearestVertex(doc, facing, u);
+	// Pinned about the point that moves, not about wherever the pointer happened to land.
+	const create = pins(doc, field, facing, near ? uOf(facing, near.at) : u);
 	// Digging one spot leaves every house at the level it was given: the base storey grows instead.
 	if (near) {
 		const z = near.z;
@@ -79,18 +88,29 @@ function pointEdit(doc: Doc, field: HeightField | null, facing: Facing, u: numbe
 	};
 }
 
-/** Height points either side of a drag, at the ground as it stands, so the change stays put. */
+/**
+ * Height points either side of a drag, at the ground as it stands, so the change stays put.
+ * They are placed about the point that will actually move, and never outside the plot, where
+ * they would both widen the drawing and pin ground the user never drew.
+ */
 function pins(doc: Doc, field: HeightField | null, facing: Facing, u: number): SpotEntity[] {
 	const out: SpotEntity[] = [];
 	const here = sectionVertices(doc, facing);
+	const plot = plotRect(doc);
+	const acrossPlan = facing === 's' || facing === 'n';
+	const lo = acrossPlan ? plot.min.x : plot.min.y;
+	const hi = acrossPlan ? plot.max.x : plot.max.y;
 	for (const side of [-1, 1]) {
+		const at = u + side * PIN_GAP;
+		const p = sectionPoint(doc, facing, at);
+		const across = acrossPlan ? p.x : p.y;
+		if (Number.isFinite(lo) && (across < lo || across > hi)) continue;
 		const has = here.some((v) => {
 			const gap = (v.u - u) * side;
 			return gap > 0 && gap <= PIN_GAP + 1e-6;
 		});
 		if (has) continue;
-		const at = sectionPoint(doc, facing, u + side * PIN_GAP);
-		out.push(makeSpotAt(at, round(heightAt(field, at.x, at.y))));
+		out.push(makeSpotAt(p, round(heightAt(field, p.x, p.y))));
 	}
 	return out;
 }
@@ -112,9 +132,11 @@ function tiltEdit(
 	if (!grabbed || !far) return { create: [], startZ: 0, apply: () => ({ spots: [], floors: [] }) };
 
 	const create: SpotEntity[] = [];
-	const anchor = (u: number): { id: EntityId; z: number; at: Vec2 } => {
+	// On a plot only a few metres across both ends would snap to the same point and the tilt
+	// would pivot on itself, so the second anchor never reuses the first.
+	const anchor = (u: number, taken?: EntityId): { id: EntityId; z: number; at: Vec2 } => {
 		const near = nearestVertex(doc, facing, u);
-		if (near) return { id: near.id, z: near.z, at: near.at };
+		if (near && near.id !== taken) return { id: near.id, z: near.z, at: near.at };
 		const at = sectionPoint(doc, facing, u);
 		const z = round(heightAt(field, at.x, at.y));
 		const spot = makeSpotAt(at, z);
@@ -122,9 +144,13 @@ function tiltEdit(
 		return { id: spot.id, z, at };
 	};
 	const grabAnchor = anchor(grabbed.u);
-	const farAnchor = anchor(far.u);
+	const farAnchor = anchor(far.u, grabAnchor.id);
 	const grabU = uOf(facing, grabAnchor.at);
 	const pivotU = uOf(facing, farAnchor.at);
+	// The ramp is driven from the anchor, which may sit short of the handle you took hold of.
+	// Without this the ground under the pointer runs away from it, at double speed on a small plot.
+	const reach = grabbed.u - pivotU;
+	const lever = Math.abs(reach) > 1e-6 ? (grabU - pivotU) / reach : 1;
 
 	const riding = [
 		...doc.entities.filter((e): e is SpotEntity => e.k === 'spot'),
@@ -136,11 +162,15 @@ function tiltEdit(
 
 	return {
 		create,
-		startZ: grabAnchor.z,
-		apply: (dz) => ({
-			spots: riding.map((r) => ({ id: r.id, z: round(r.z + dz * r.t) })),
-			floors: houses.map((h) => ({ id: h.id, floor: round(h.floor + dz * h.t) }))
-		})
+		// The height on the handle, not the anchor's, so typing a number sets what it reads.
+		startZ: round(grabbed.z),
+		apply: (dz) => {
+			const at = dz * lever;
+			return {
+				spots: riding.map((r) => ({ id: r.id, z: round(r.z + at * r.t) })),
+				floors: houses.map((h) => ({ id: h.id, floor: round(h.floor + at * h.t) }))
+			};
+		}
 	};
 }
 

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createDoc } from '../doc/doc.js';
-import { makeSpot } from '../doc/factory.js';
+import { makePlant, makeSpot } from '../doc/factory.js';
 import type { Doc } from '../doc/types.js';
 import { buildField, heightAt } from './field.js';
 import {
 	elevationBounds,
 	handleAt,
+	sectionPoint,
 	sectionVertices,
 	slopeHandles,
 	tiltFactor
@@ -221,5 +222,40 @@ describe('sectionVertices', () => {
 		doc.entities.push(makeSpot({ x: 6, y: 10 }, -0.5));
 		const us = sectionVertices(doc, 's').map((v) => v.u);
 		expect(us).toEqual([...us].sort((a, b) => a - b));
+	});
+});
+
+describe('the section line on a plot with no boundary yet', () => {
+	/** Setting ground levels before drawing the tomtgräns is a normal way to start. */
+	const started = (): Doc => {
+		const doc = createDoc();
+		for (let i = 0; i < 4; i++) doc.entities.push(makeSpot({ x: i * 5, y: 0 }, -i * 0.4));
+		return doc;
+	};
+
+	it('holds still when something else is drawn', () => {
+		const doc = started();
+		const before = sectionPoint(doc, 's', 7);
+		doc.entities.push(makePlant({ x: 4, y: 9 }, 'bjork', 0, 0));
+		expect(sectionPoint(doc, 's', 7)).toEqual(before);
+	});
+
+	it('keeps every handle you have already placed', () => {
+		const doc = started();
+		const before = sectionVertices(doc, 's').length;
+		doc.entities.push(makePlant({ x: 4, y: 9 }, 'bjork', 0, 0));
+		expect(sectionVertices(doc, 's')).toHaveLength(before);
+		expect(before).toBe(4);
+	});
+
+	it('follows the boundary once there is one', () => {
+		const doc = started();
+		doc.plot.boundary = [
+			{ x: 0, y: -5 },
+			{ x: 20, y: -5 },
+			{ x: 20, y: 15 },
+			{ x: 0, y: 15 }
+		];
+		expect(sectionPoint(doc, 's', 7).y).toBeCloseTo(5, 6);
 	});
 });

@@ -93,17 +93,24 @@ function fillBase(f: HeightField, spots: readonly Spot[]): void {
 		f.h.fill(spots[0].z);
 		return;
 	}
-	const line = collinearFit(spots);
 	for (let j = 0; j < f.ny; j++) {
 		const y = f.y0 + j * f.cell;
 		for (let i = 0; i < f.nx; i++) {
 			const x = f.x0 + i * f.cell;
-			f.h[j * f.nx + i] = line ? line(x, y) : localPlane(spots, x, y);
+			f.h[j * f.nx + i] = localPlane(spots, x, y);
 		}
 	}
 }
 
-type Plane = (x: number, y: number) => number;
+/**
+ * Slopes are only trusted in a direction the points actually spread out along. Below a
+ * twentieth of the data's own length the crossfall is ignored, at a quarter and beyond it
+ * counts in full: points strung out along one line say nothing about the fall across it,
+ * and reading one off a two centimetre baseline used to throw the plot edges hundreds of
+ * metres up and down.
+ */
+const SPREAD_IGNORED = 0.05;
+const SPREAD_TRUSTED = 0.25;
 
 /** Height at one spot, or a plane fitted around it with the near points weighted hardest. */
 function localPlane(spots: readonly Spot[], x: number, y: number): number {
@@ -133,75 +140,48 @@ function localPlane(spots: readonly Spot[], x: number, y: number): number {
 		syz += w * dy * s.z;
 	}
 	if (sw <= 0) return 0;
-	// Normal equations for z = a + b*dx + c*dy about the query point, so `a` is the answer.
-	const m = [
-		[sw, sx, sy],
-		[sx, sxx, sxy],
-		[sy, sxy, syy]
-	];
-	const rhs = [sz, sxz, syz];
-	const a = solve3(m, rhs);
-	return a === null ? sz / sw : a;
+
+	const cx = sx / sw;
+	const cy = sy / sw;
+	const zbar = sz / sw;
+	// Weighted moments about the points' own centre, which is where the slopes are read from.
+	const mxx = sxx - sx * cx;
+	const mxy = sxy - sx * cy;
+	const myy = syy - sy * cy;
+	const bx = sxz - sx * zbar;
+	const by = syz - sy * zbar;
+
+	const half = (mxx + myy) / 2;
+	const gap = Math.hypot((mxx - myy) / 2, mxy);
+	const l1 = half + gap;
+	const l2 = Math.max(0, half - gap);
+	if (!(l1 > 0)) return zbar;
+	const [ux, uy] =
+		Math.abs(mxy) > 1e-12 * (mxx + myy) ? unit(l1 - myy, mxy) : mxx >= myy ? [1, 0] : [0, 1];
+
+	let z = zbar;
+	for (const [l, dx, dy] of [
+		[l1, ux, uy],
+		[l2, -uy, ux]
+	] as const) {
+		if (!(l > 0)) continue;
+		const trust = spreadTrust(Math.sqrt(l / l1));
+		if (trust <= 0) continue;
+		const slope = (bx * dx + by * dy) / l;
+		z -= trust * slope * (cx * dx + cy * dy);
+	}
+	return z;
 }
 
-/** First unknown of a 3 by 3 system, or null when it is too near singular to trust. */
-function solve3(m: number[][], rhs: number[]): number | null {
-	const det =
-		m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
-		m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
-		m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-	const scale = Math.abs(m[0][0]) * Math.abs(m[1][1]) * Math.abs(m[2][2]);
-	if (!Number.isFinite(det) || Math.abs(det) < 1e-12 * Math.max(scale, 1e-12)) return null;
-	const d0 =
-		rhs[0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
-		m[0][1] * (rhs[1] * m[2][2] - m[1][2] * rhs[2]) +
-		m[0][2] * (rhs[1] * m[2][1] - m[1][1] * rhs[2]);
-	return d0 / det;
+function unit(x: number, y: number): [number, number] {
+	const len = Math.hypot(x, y);
+	return len > 1e-12 ? [x / len, y / len] : [1, 0];
 }
 
-/**
- * Points in a line leave the across-slope direction undetermined, and a plane fit would pick
- * one at random, so the ground tilts only along the line they make.
- */
-function collinearFit(spots: readonly Spot[]): Plane | null {
-	let sx = 0;
-	let sy = 0;
-	let sz = 0;
-	for (const s of spots) {
-		sx += s.at.x;
-		sy += s.at.y;
-		sz += s.z;
-	}
-	const n = spots.length;
-	const mx = sx / n;
-	const my = sy / n;
-	const mz = sz / n;
-	let sxx = 0;
-	let sxy = 0;
-	let syy = 0;
-	let sxz = 0;
-	let syz = 0;
-	for (const s of spots) {
-		const dx = s.at.x - mx;
-		const dy = s.at.y - my;
-		const dz = s.z - mz;
-		sxx += dx * dx;
-		sxy += dx * dy;
-		syy += dy * dy;
-		sxz += dx * dz;
-		syz += dy * dz;
-	}
-	const det = sxx * syy - sxy * sxy;
-	if (Math.abs(det) > 1e-9) return null;
-	const l2 = sxx + syy;
-	if (l2 < 1e-12) return () => mz;
-	const [ux, uy] = sxx >= syy ? [sxx, sxy] : [sxy, syy];
-	const ul = Math.hypot(ux, uy);
-	if (ul < 1e-12) return () => mz;
-	const dx = ux / ul;
-	const dy = uy / ul;
-	const g = (sxz * dx + syz * dy) / (sxx * dx * dx + 2 * sxy * dx * dy + syy * dy * dy);
-	return (x, y) => mz + g * ((x - mx) * dx + (y - my) * dy);
+function spreadTrust(ratio: number): number {
+	const t = (ratio - SPREAD_IGNORED) / (SPREAD_TRUSTED - SPREAD_IGNORED);
+	const c = t < 0 ? 0 : t > 1 ? 1 : t;
+	return c * c * (3 - 2 * c);
 }
 
 /** Flatten the ring to its level, and ramp the ground back to meet it if it wants a bank. */

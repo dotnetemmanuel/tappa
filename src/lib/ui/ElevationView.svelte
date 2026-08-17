@@ -47,6 +47,8 @@
 	let tip = $state<{ x: number; y: number; text: string; live: boolean } | null>(null);
 
 	const FACINGS: Facing[] = ['s', 'e', 'n', 'w'];
+	/** Pixels of movement before a press counts as a drag rather than a click. */
+	const CLICK_SLOP = 3;
 
 	function draw(): void {
 		const ctx = canvas?.getContext('2d', { alpha: false });
@@ -117,13 +119,13 @@
 		schedule();
 	});
 
-	/** Put whatever the edit needs into the document, as its own undo step. */
-	function start(target: GroundTarget): GroundEdit {
-		const edit = groundEdit(app.doc, app.field, app.facing, target);
-		if (edit.create.length > 0) {
-			app.history.run(new AddEntities(edit.create, 'Marknivå'));
-		}
-		return edit;
+	/**
+	 * The points an edit needs go in on the first real movement, not on the press: a click that
+	 * only reads a height, or one you think better of, must not leave three points behind.
+	 */
+	function commitCreate(edit: GroundEdit, label: string): void {
+		if (edit.create.length === 0 || findEntity(app.doc, edit.create[0].id)) return;
+		app.history.run(new AddEntities(edit.create, label));
 	}
 
 	/** Both halves of a move in one step: the ground, and any house a tilt carries with it. */
@@ -156,7 +158,8 @@
 			pan = { x: e.clientX, y: e.clientY };
 			return;
 		}
-		dragging = { edit: start(aim.target), from: e.clientY, u: aim.u, side: aim.side };
+		const edit = groundEdit(app.doc, app.field, app.facing, aim.target);
+		dragging = { edit, from: e.clientY, u: aim.u, side: aim.side };
 		grab = { side: aim.side, u: aim.u, z: aim.z, at: { x: 0, y: 0 }, spot: null };
 		ghost = null;
 		showTip(e, r, liveText(aim.side, aim.z, 0));
@@ -166,8 +169,10 @@
 		const r = canvas.getBoundingClientRect();
 		if (dragging) {
 			const dz = (dragging.from - e.clientY) / view.scale;
-			if (Math.abs(dz) > 0.004) {
-				move(dragging.edit, dz, true, dragging.side === 'along' ? 'Marknivå' : 'Luta tomten');
+			const label = dragging.side === 'along' ? 'Marknivå' : 'Luta tomten';
+			if (Math.abs(dragging.from - e.clientY) > CLICK_SLOP && Math.abs(dz) > 0.004) {
+				commitCreate(dragging.edit, label);
+				move(dragging.edit, dz, true, label);
 			}
 			const now = handleAt(app.doc, app.field, app.facing, dragging.u, dragging.side);
 			grab = now;
@@ -220,18 +225,22 @@
 	function pointerUp(e: PointerEvent): void {
 		const r = canvas.getBoundingClientRect();
 		if (dragging) {
-			const moved = Math.abs(dragging.from - e.clientY) > 3;
+			const moved = Math.abs(dragging.from - e.clientY) > CLICK_SLOP;
 			if (!moved) {
-				const p = toScreen(view, { x: dragging.u, y: dragging.edit.startZ });
+				const target: GroundTarget =
+					dragging.side === 'along'
+						? { kind: 'point', u: dragging.u }
+						: { kind: 'tilt', side: dragging.side === 'right' ? 'right' : 'left' };
+				// The height the edit itself will measure against, taken now rather than at the
+				// press, so a drag that came back under the slop is not counted twice.
+				const z = groundEdit(app.doc, app.field, app.facing, target).startZ;
+				const p = toScreen(view, { x: dragging.u, y: z });
 				editing = {
-					target:
-						dragging.side === 'along'
-							? { kind: 'point', u: dragging.u }
-							: { kind: 'tilt', side: dragging.side === 'right' ? 'right' : 'left' },
-					z: dragging.edit.startZ,
+					target,
+					z,
 					x: Math.min(Math.max(8, p.x - 46), r.width - 104),
 					y: Math.max(8, p.y - 34),
-					value: dragging.edit.startZ.toFixed(2).replace('.', ',')
+					value: z.toFixed(2).replace('.', ',')
 				};
 			}
 			dragging = null;
@@ -250,12 +259,11 @@
 		if (!Number.isFinite(z) || Math.abs(z - state.z) < 1e-9) return;
 		const edit = groundEdit(app.doc, app.field, app.facing, state.target);
 		const label = state.target.kind === 'tilt' ? 'Luta tomten' : 'Marknivå';
-		const created = edit.create;
 		const next = edit.apply(z - state.z);
 		app.history.transact(label, () => {
-			if (created.length > 0) app.history.run(new AddEntities(created, label));
-			const next2 = moved(next);
-			if (next2.length > 0) app.history.run(new ReplaceEntities(next2, label));
+			commitCreate(edit, label);
+			const settled = moved(next);
+			if (settled.length > 0) app.history.run(new ReplaceEntities(settled, label));
 		});
 	}
 

@@ -130,6 +130,17 @@ missing under each one below is the honest remainder.
   mound reads as no obstacle at all.
 - The side view draws silhouettes rather than a true section, and carries no
   dimensions of its own.
+- The ground grid rebuilds on every document revision, so dragging the ground on a
+  100 by 100 m plot costs about 40 ms a frame and the line lags the pointer. The
+  knob is `MAX_CELLS` in `core/terrain/field.ts`.
+- A pin dropped beside a drag takes its height from the baked grid rather than the
+  fit, so it can freeze the ground a centimetre or two off.
+- Before a plot boundary is drawn, the side view takes its section from the median
+  depth of the height points, so marking more levels off that line than on it moves
+  the line and hides the handles. Drawing the boundary settles it.
+- The far end of a tilt drifts a few centimetres when a height point sits inside it,
+  because the pivot snaps to that point and the ground past it keeps following the
+  ramp.
 - Props are not occluders in the sun study, and a pitched roof is approximated
   there by one flat box at 55 percent of the eave to ridge rise.
 - Openings are placed by a slider in the inspector, not by clicking the wall.
