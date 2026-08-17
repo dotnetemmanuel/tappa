@@ -55,7 +55,8 @@ export function elevationBounds(doc: Doc, field: HeightField | null, facing: Fac
  * first time you drag or type.
  */
 export type SlopeHandle = {
-	side: 'left' | 'right';
+	/** Which end it belongs to, or `along` for one grabbed anywhere on the line. */
+	side: 'left' | 'right' | 'along';
 	/** Position across the view and the ground height there. */
 	u: number;
 	z: number;
@@ -66,43 +67,83 @@ export type SlopeHandle = {
 
 const HANDLE_REACH = 3;
 
+/**
+ * A grab point on the section line, which runs through the middle of the plot. Dragging it
+ * moves the ground at that spot and nowhere else, which the silhouette behind it cannot
+ * promise: the highest ground at a position can be twenty metres away at the far edge.
+ */
+export function handleAt(
+	doc: Doc,
+	field: HeightField | null,
+	facing: Facing,
+	u: number,
+	side: SlopeHandle['side'] = 'along'
+): SlopeHandle {
+	const at = sectionPoint(doc, facing, u);
+	const z = heightAt(field, at.x, at.y);
+	let spot: EntityId | null = null;
+	let best = HANDLE_REACH;
+	for (const e of doc.entities) {
+		if (e.k !== 'spot') continue;
+		const d = Math.hypot(e.at.x - at.x, e.at.y - at.y);
+		if (d < best) {
+			best = d;
+			spot = e.id;
+		}
+	}
+	return { side, u, z: Number.isFinite(z) ? z : 0, at, spot };
+}
+
+/** Where a plan point lands across the view. */
+export const uOf = (facing: Facing, p: Vec2): number => AXES[facing].u(p);
+
+/**
+ * How much of a tilt a point takes: all of it at the end being dragged, none at the far end
+ * it pivots about, and a straight ramp in between. Points outside the two ends carry on along
+ * the same ramp, so the whole plot turns as one piece.
+ */
+export function tiltFactor(facing: Facing, grabU: number, pivotU: number, at: Vec2): number {
+	const span = grabU - pivotU;
+	if (Math.abs(span) < 1e-6) return 0;
+	return (uOf(facing, at) - pivotU) / span;
+}
+
+/** Where the section line crosses a position in the view: the middle of the plot, in plan. */
+export function sectionPoint(doc: Doc, facing: Facing, u: number): Vec2 {
+	const b = docBounds(doc);
+	const acrossPlan = facing === 's' || facing === 'n';
+	const mid = acrossPlan ? (b.min.y + b.max.y) / 2 : (b.min.x + b.max.x) / 2;
+	return fromView(facing, u, Number.isFinite(mid) ? mid : 0);
+}
+
+/** The ground along the middle of the plot, which is the line the handles ride on. */
+export function sectionProfile(
+	doc: Doc,
+	field: HeightField | null,
+	facing: Facing,
+	uMin: number,
+	uMax: number
+): Sample[] {
+	const out: Sample[] = [];
+	const columns = 160;
+	for (let i = 0; i <= columns; i++) {
+		const u = uMin + ((uMax - uMin) * i) / columns;
+		const p = sectionPoint(doc, facing, u);
+		out.push({ u, z: heightAt(field, p.x, p.y) });
+	}
+	return out;
+}
+
+/** The two ends, which carry their heights as numbers you can read without hunting. */
 export function slopeHandles(doc: Doc, field: HeightField | null, facing: Facing): SlopeHandle[] {
 	const b = docBounds(doc);
 	if (!Number.isFinite(b.min.x) || b.max.x < b.min.x) return [];
 	const bounds = elevationBounds(doc, field, facing);
 	const inset = (bounds.max.x - bounds.min.x) * 0.02;
-	const acrossPlan = facing === 's' || facing === 'n';
-	const depthMin = acrossPlan ? b.min.y : b.min.x;
-	const depthMax = acrossPlan ? b.max.y : b.max.x;
-
-	return (['left', 'right'] as const).map((side) => {
-		const u = side === 'left' ? bounds.min.x + inset : bounds.max.x - inset;
-		// The handle sits on the ground line you can see, which is the highest ground at that
-		// position, so grabbing the number moves exactly the line under it.
-		let at = fromView(facing, u, (depthMin + depthMax) / 2);
-		let z = -Infinity;
-		const steps = 40;
-		for (let k = 0; k <= steps; k++) {
-			const d = depthMin + ((depthMax - depthMin) * k) / steps;
-			const p = fromView(facing, u, d);
-			const h = heightAt(field, p.x, p.y);
-			if (h > z) {
-				z = h;
-				at = p;
-			}
-		}
-		let spot: EntityId | null = null;
-		let best = HANDLE_REACH;
-		for (const e of doc.entities) {
-			if (e.k !== 'spot') continue;
-			const d = Math.hypot(e.at.x - at.x, e.at.y - at.y);
-			if (d < best) {
-				best = d;
-				spot = e.id;
-			}
-		}
-		return { side, u, z: Number.isFinite(z) ? z : 0, at, spot };
-	});
+	return [
+		handleAt(doc, field, facing, bounds.min.x + inset, 'left'),
+		handleAt(doc, field, facing, bounds.max.x - inset, 'right')
+	];
 }
 
 export type Sample = { u: number; z: number };

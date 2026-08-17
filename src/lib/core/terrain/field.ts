@@ -81,10 +81,11 @@ export function heightAt(f: HeightField | null, x: number, y: number): number {
 const clamp = (x: number, lo: number, hi: number): number => (x < lo ? lo : x > hi ? hi : x);
 
 /**
- * A tilted plane through the height points, bent so it passes through each one.
- * The bend is a distance weighted sum of the points' own distances from the plane,
- * which is exactly zero when the points already lie on one, so three points give a
- * dead even slope rather than three dimples.
+ * The ground between the height points, by moving least squares: at each cell a plane is
+ * fitted through all the points, weighted by one over distance to the fourth, which makes
+ * it pass exactly through every point and reproduce a plane exactly from three of them.
+ * The weighting is what keeps an edit local: a point holds the ground where it stands, so
+ * raising one part of the slope leaves the rest of it where the other points pin it.
  */
 function fillBase(f: HeightField, spots: readonly Spot[]): void {
 	if (spots.length === 0) return;
@@ -92,21 +93,77 @@ function fillBase(f: HeightField, spots: readonly Spot[]): void {
 		f.h.fill(spots[0].z);
 		return;
 	}
-	const plane = fitPlane(spots);
-	const residual = spots.map((s) => s.z - plane(s.at.x, s.at.y));
-	const bent = residual.some((r) => Math.abs(r) > 1e-9);
+	const line = collinearFit(spots);
 	for (let j = 0; j < f.ny; j++) {
 		const y = f.y0 + j * f.cell;
 		for (let i = 0; i < f.nx; i++) {
 			const x = f.x0 + i * f.cell;
-			f.h[j * f.nx + i] = plane(x, y) + (bent ? shepard(spots, residual, x, y) : 0);
+			f.h[j * f.nx + i] = line ? line(x, y) : localPlane(spots, x, y);
 		}
 	}
 }
 
 type Plane = (x: number, y: number) => number;
 
-function fitPlane(spots: readonly Spot[]): Plane {
+/** Height at one spot, or a plane fitted around it with the near points weighted hardest. */
+function localPlane(spots: readonly Spot[], x: number, y: number): number {
+	let sw = 0;
+	let sx = 0;
+	let sy = 0;
+	let sz = 0;
+	let sxx = 0;
+	let sxy = 0;
+	let syy = 0;
+	let sxz = 0;
+	let syz = 0;
+	for (const s of spots) {
+		const dx = s.at.x - x;
+		const dy = s.at.y - y;
+		const d2 = dx * dx + dy * dy;
+		if (d2 < 1e-9) return s.z;
+		const w = 1 / (d2 * d2);
+		sw += w;
+		sx += w * dx;
+		sy += w * dy;
+		sz += w * s.z;
+		sxx += w * dx * dx;
+		sxy += w * dx * dy;
+		syy += w * dy * dy;
+		sxz += w * dx * s.z;
+		syz += w * dy * s.z;
+	}
+	if (sw <= 0) return 0;
+	// Normal equations for z = a + b*dx + c*dy about the query point, so `a` is the answer.
+	const m = [
+		[sw, sx, sy],
+		[sx, sxx, sxy],
+		[sy, sxy, syy]
+	];
+	const rhs = [sz, sxz, syz];
+	const a = solve3(m, rhs);
+	return a === null ? sz / sw : a;
+}
+
+/** First unknown of a 3 by 3 system, or null when it is too near singular to trust. */
+function solve3(m: number[][], rhs: number[]): number | null {
+	const det =
+		m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+		m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+		m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+	const scale = Math.abs(m[0][0]) * Math.abs(m[1][1]) * Math.abs(m[2][2]);
+	if (!Number.isFinite(det) || Math.abs(det) < 1e-12 * Math.max(scale, 1e-12)) return null;
+	const d0 =
+		rhs[0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+		m[0][1] * (rhs[1] * m[2][2] - m[1][2] * rhs[2]) +
+		m[0][2] * (rhs[1] * m[2][1] - m[1][1] * rhs[2]);
+	return d0 / det;
+}
+
+/**
+ * Points in a line leave the across-slope direction undetermined, and a plane fit would pick
+ * one at random, so the ground tilts only along the line they make.
+ */
+function collinearFit(spots: readonly Spot[]): Plane | null {
 	let sx = 0;
 	let sy = 0;
 	let sz = 0;
@@ -135,36 +192,16 @@ function fitPlane(spots: readonly Spot[]): Plane {
 		syz += dy * dz;
 	}
 	const det = sxx * syy - sxy * sxy;
-	// Points in a line leave the across-slope direction undetermined, so tilt only along them.
-	if (Math.abs(det) < 1e-9) {
-		const l2 = sxx + syy;
-		if (l2 < 1e-12) return () => mz;
-		const [ux, uy] = sxx >= syy ? [sxx, sxy] : [sxy, syy];
-		const ul = Math.hypot(ux, uy);
-		if (ul < 1e-12) return () => mz;
-		const dx = ux / ul;
-		const dy = uy / ul;
-		const g = (sxz * dx + syz * dy) / (sxx * dx * dx + 2 * sxy * dx * dy + syy * dy * dy);
-		return (x, y) => mz + g * ((x - mx) * dx + (y - my) * dy);
-	}
-	const a = (sxz * syy - syz * sxy) / det;
-	const b = (syz * sxx - sxz * sxy) / det;
-	return (x, y) => mz + a * (x - mx) + b * (y - my);
-}
-
-function shepard(spots: readonly Spot[], residual: readonly number[], x: number, y: number): number {
-	let num = 0;
-	let den = 0;
-	for (let i = 0; i < spots.length; i++) {
-		const dx = x - spots[i].at.x;
-		const dy = y - spots[i].at.y;
-		const d2 = dx * dx + dy * dy;
-		if (d2 < 1e-12) return residual[i];
-		const w = 1 / (d2 * d2);
-		num += w * residual[i];
-		den += w;
-	}
-	return den > 0 ? num / den : 0;
+	if (Math.abs(det) > 1e-9) return null;
+	const l2 = sxx + syy;
+	if (l2 < 1e-12) return () => mz;
+	const [ux, uy] = sxx >= syy ? [sxx, sxy] : [sxy, syy];
+	const ul = Math.hypot(ux, uy);
+	if (ul < 1e-12) return () => mz;
+	const dx = ux / ul;
+	const dy = uy / ul;
+	const g = (sxz * dx + syz * dy) / (sxx * dx * dx + 2 * sxy * dx * dy + syy * dy * dy);
+	return (x, y) => mz + g * ((x - mx) * dx + (y - my) * dy);
 }
 
 /** Flatten the ring to its level, and ramp the ground back to meet it if it wants a bank. */

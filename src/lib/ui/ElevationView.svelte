@@ -6,13 +6,23 @@
 	import { handleHitBox, paintElevation } from '../render2d/elevation.js';
 	import {
 		elevationBounds,
+		handleAt,
 		slopeHandles,
+		tiltFactor,
 		FACING_SV,
 		type Facing,
 		type SlopeHandle
 	} from '../core/terrain/section.js';
 	import { PLAN } from '../render2d/theme.js';
-	import { createView, fitTo, panBy, toScreen, zoomAt, type View } from '../render2d/view.js';
+	import {
+		createView,
+		fitTo,
+		panBy,
+		toScreen,
+		toWorld,
+		zoomAt,
+		type View
+	} from '../render2d/view.js';
 	import type { AppState } from './app.svelte.js';
 
 	let { app }: { app: AppState } = $props();
@@ -23,8 +33,19 @@
 	let dpr = 1;
 	let frame = 0;
 	let pan: { x: number; y: number } | null = null;
-	let dragging: { handle: SlopeHandle; spot: string; from: number; startZ: number } | null = null;
+	type Drag = {
+		handle: SlopeHandle;
+		from: number;
+		/** Set for a local drag: the one height point that moves. */
+		spot?: string;
+		startZ?: number;
+		/** Set for an end drag: every height point rides the ramp instead. */
+		tilt?: Tilt | null;
+	};
+	let dragging: Drag | null = null;
 	let editing = $state<{ handle: SlopeHandle; x: number; y: number; value: string } | null>(null);
+	let grab = $state<SlopeHandle | null>(null);
+	let onLine = $state(false);
 
 	const FACINGS: Facing[] = ['s', 'e', 'n', 'w'];
 
@@ -37,7 +58,8 @@
 		ctx.fillRect(0, 0, view.w, view.h);
 		paintElevation(ctx, app.doc, app.field, app.facing, view, {
 			years: app.years,
-			month: app.month
+			month: app.month,
+			grab
 		});
 		ctx.restore();
 	}
@@ -88,6 +110,7 @@
 		void app.rev;
 		void app.years;
 		void view;
+		void grab;
 		schedule();
 	});
 
@@ -97,12 +120,18 @@
 		return slopeHandles(app.doc, app.field, app.facing);
 	});
 
-	function handleAt(x: number, y: number): SlopeHandle | null {
+	const GRAB_PX = 12;
+
+	/** An end handle if the pointer is on its number, otherwise the ground line under it. */
+	function grabAt(x: number, y: number): SlopeHandle | null {
 		for (const h of handles) {
 			const box = handleHitBox(view, h);
 			if (x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h) return h;
 		}
-		return null;
+		const world = toWorld(view, { x, y });
+		const here = handleAt(app.doc, app.field, app.facing, world.x);
+		const line = toScreen(view, { x: here.u, y: here.z });
+		return Math.abs(line.y - y) <= GRAB_PX ? here : null;
 	}
 
 	/**
@@ -125,21 +154,63 @@
 		else app.history.run(new ReplaceEntities([next], 'Marknivå'));
 	}
 
+	type Tilt = { pivot: number; span: number; spots: { id: string; t: number; z: number }[] };
+
+	/**
+	 * The two ends tilt the whole plot: the far end stays put and every height point moves
+	 * along the ramp between them. Anywhere else on the line moves only its own point.
+	 */
+	function tiltFor(h: SlopeHandle): Tilt | null {
+		const far = handles.find((x) => x.side !== h.side && x.side !== 'along');
+		if (!far) return null;
+		const span = h.u - far.u;
+		if (Math.abs(span) < 1e-6) return null;
+		// Both ends become real points, so the pivot is something the document holds.
+		spotFor(h);
+		spotFor(far);
+		const spots = app.doc.entities
+			.filter((e) => e.k === 'spot')
+			.map((e) => ({
+				id: e.id,
+				t: tiltFactor(app.facing, h.u, far.u, e.at),
+				z: e.z
+			}));
+		return { pivot: far.u, span, spots };
+	}
+
+	function applyTilt(tilt: Tilt, dz: number, coalesce: boolean): void {
+		const next = tilt.spots
+			.map(({ id, t, z }) => {
+				const e = findEntity(app.doc, id);
+				return e && e.k === 'spot' ? { ...e, z: Math.round((z + dz * t) * 100) / 100 } : null;
+			})
+			.filter((e) => e !== null);
+		if (next.length === 0) return;
+		if (coalesce)
+			app.history.coalesced(() => app.history.run(new ReplaceEntities(next, 'Luta tomten')));
+		else app.history.run(new ReplaceEntities(next, 'Luta tomten'));
+	}
+
 	function pointerDown(e: PointerEvent): void {
 		const r = canvas.getBoundingClientRect();
 		const x = e.clientX - r.left;
 		const y = e.clientY - r.top;
-		const hit = handleAt(x, y);
+		const hit = grabAt(x, y);
 		if (hit) {
 			canvas.setPointerCapture(e.pointerId);
-			const spot = spotFor(hit);
-			const held = findEntity(app.doc, spot);
-			dragging = {
-				handle: hit,
-				spot,
-				from: e.clientY,
-				startZ: held && held.k === 'spot' ? held.z : hit.z
-			};
+			if (hit.side === 'along') {
+				const spot = spotFor(hit);
+				const held = findEntity(app.doc, spot);
+				dragging = {
+					handle: hit,
+					spot,
+					from: e.clientY,
+					startZ: held && held.k === 'spot' ? held.z : hit.z
+				};
+			} else {
+				dragging = { handle: hit, from: e.clientY, tilt: tiltFor(hit) };
+			}
+			grab = hit;
 			return;
 		}
 		canvas.setPointerCapture(e.pointerId);
@@ -147,16 +218,25 @@
 	}
 
 	function pointerMove(e: PointerEvent): void {
+		const r = canvas.getBoundingClientRect();
 		if (dragging) {
 			const dz = (dragging.from - e.clientY) / view.scale;
 			if (Math.abs(dz) > 0.005) {
-				setSpot(dragging.spot, dragging.startZ + dz, true);
+				if (dragging.tilt) applyTilt(dragging.tilt, dz, true);
+				else if (dragging.spot) setSpot(dragging.spot, (dragging.startZ ?? 0) + dz, true);
 			}
+			grab = handleAt(app.doc, app.field, app.facing, dragging.handle.u, dragging.handle.side);
 			return;
 		}
-		if (!pan) return;
-		view = panBy(view, { x: e.clientX - pan.x, y: e.clientY - pan.y });
-		pan = { x: e.clientX, y: e.clientY };
+		if (pan) {
+			view = panBy(view, { x: e.clientX - pan.x, y: e.clientY - pan.y });
+			pan = { x: e.clientX, y: e.clientY };
+			return;
+		}
+		const hover = grabAt(e.clientX - r.left, e.clientY - r.top);
+		onLine = hover !== null;
+		grab = hover && hover.side === 'along' ? hover : null;
+		schedule();
 	}
 
 	function pointerUp(e: PointerEvent): void {
@@ -167,6 +247,7 @@
 			dragging = null;
 		}
 		pan = null;
+		grab = null;
 		canvas.releasePointerCapture?.(e.pointerId);
 	}
 
@@ -186,7 +267,12 @@
 		if (!state) return;
 		const z = Number(state.value.replace(',', '.').trim());
 		if (!Number.isFinite(z)) return;
-		setSpot(spotFor(state.handle), z, false);
+		if (state.handle.side === 'along') {
+			setSpot(spotFor(state.handle), z, false);
+			return;
+		}
+		const tilt = tiltFor(state.handle);
+		if (tilt) applyTilt(tilt, z - state.handle.z, false);
 	}
 
 	function wheel(e: WheelEvent): void {
@@ -200,6 +286,7 @@
 	<canvas
 		bind:this={canvas}
 		class="block h-full w-full touch-none"
+		style:cursor={onLine ? 'ns-resize' : 'grab'}
 		aria-label="Fasadvy"
 		onpointerdown={pointerDown}
 		onpointermove={pointerMove}
@@ -251,6 +338,7 @@
 	</div>
 
 	<p class="absolute right-2 bottom-2 text-[11px] text-sage">
-		Dra i en marknivå för att luta tomten, klicka på siffran för att skriva in den.
+		Dra var som helst i marklinjen för att höja eller sänka marken där, klicka på en siffra för att
+		skriva in den.
 	</p>
 </div>

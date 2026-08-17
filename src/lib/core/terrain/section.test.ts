@@ -3,7 +3,7 @@ import { createDoc } from '../doc/doc.js';
 import { makeSpot } from '../doc/factory.js';
 import type { Doc } from '../doc/types.js';
 import { buildField, heightAt } from './field.js';
-import { elevationBounds, slopeHandles } from './section.js';
+import { elevationBounds, handleAt, slopeHandles, tiltFactor } from './section.js';
 
 /** Falls 2 m from west to east, level north to south. */
 function slopingPlot(): Doc {
@@ -33,7 +33,7 @@ describe('slopeHandles', () => {
 		expect(right.z).toBeLessThan(-1.5);
 	});
 
-	it('sits on the ground it stands for, so the number matches the line', () => {
+	it('sits on the section line it stands for, so the number matches what moves', () => {
 		const doc = slopingPlot();
 		const field = buildField(doc);
 		for (const h of slopeHandles(doc, field, 's')) {
@@ -41,23 +41,29 @@ describe('slopeHandles', () => {
 		}
 	});
 
-	it('takes the highest ground across the plot, not the middle of it', () => {
+	it('stays on the middle of the plot even when a ridge stands higher at the edge', () => {
 		const doc = slopingPlot();
-		// A ridge along the north edge: the line at each end has to follow the ridge.
 		doc.entities.push(makeSpot({ x: 10, y: 20 }, 4));
 		const field = buildField(doc);
 		for (const h of slopeHandles(doc, field, 's')) {
-			const middle = heightAt(field, h.at.x, 10);
-			expect(h.z).toBeGreaterThanOrEqual(middle - 1e-6);
+			expect(h.at.y).toBeCloseTo(10, 1);
+			expect(h.z).toBeCloseTo(heightAt(field, h.at.x, h.at.y), 6);
 		}
 	});
 
-	it('binds to a height point that is already there', () => {
+	it('binds to a height point standing on the section line', () => {
 		const doc = slopingPlot();
+		doc.entities.push(makeSpot({ x: 0.5, y: 10 }, 0));
 		const field = buildField(doc);
 		const [left] = slopeHandles(doc, field, 's');
 		const spot = doc.entities.find((e) => e.id === left.spot);
 		expect(spot?.k).toBe('spot');
+	});
+
+	it('binds to nothing when the only points sit at the far corners', () => {
+		const doc = slopingPlot();
+		const field = buildField(doc);
+		expect(slopeHandles(doc, field, 's').every((h) => h.spot === null)).toBe(true);
 	});
 
 	it('leaves the handle unbound where there is no height point close by', () => {
@@ -98,5 +104,84 @@ describe('elevationBounds', () => {
 		expect(b.max.x).toBeGreaterThanOrEqual(20);
 		expect(b.min.y).toBeLessThan(-2);
 		expect(b.max.y).toBeGreaterThan(0);
+	});
+});
+
+describe('handleAt', () => {
+	it('lands on the section line anywhere along the view, not only at the ends', () => {
+		const doc = slopingPlot();
+		const field = buildField(doc);
+		for (const u of [2, 7, 12, 18]) {
+			const h = handleAt(doc, field, 's', u);
+			expect(h.side).toBe('along');
+			expect(h.u).toBe(u);
+			expect(heightAt(field, h.at.x, h.at.y)).toBeCloseTo(h.z, 6);
+		}
+	});
+
+	it('follows the slope, so the middle sits between the two ends', () => {
+		const doc = slopingPlot();
+		const field = buildField(doc);
+		const [left, right] = slopeHandles(doc, field, 's');
+		const middle = handleAt(doc, field, 's', (left.u + right.u) / 2);
+		expect(middle.z).toBeLessThan(left.z);
+		expect(middle.z).toBeGreaterThan(right.z);
+	});
+
+	it('binds to a height point standing where you grabbed, and to none out in the open', () => {
+		const doc = slopingPlot();
+		doc.entities.push(makeSpot({ x: 10, y: 10 }, 3));
+		const field = buildField(doc);
+		const onPoint = handleAt(doc, field, 's', 10);
+		expect(onPoint.spot).not.toBeNull();
+		expect(handleAt(doc, field, 's', 15).spot).toBeNull();
+	});
+
+	it('raises the ground where you grabbed it and barely disturbs the rest', () => {
+		const doc = slopingPlot();
+		const before = buildField(doc);
+		const far = handleAt(doc, before, 's', 0);
+		doc.entities.push(makeSpot({ x: 12, y: 10 }, 5));
+		const after = buildField(doc);
+		expect(handleAt(doc, after, 's', 12).z).toBeCloseTo(5, 1);
+		// Twelve metres away and five metres up: the rest of the plot may lean, but only slightly.
+		expect(Math.abs(handleAt(doc, after, 's', 0).z - far.z)).toBeLessThan(0.25);
+	});
+
+	it('leaves a height point exactly where it stands when another one moves', () => {
+		const doc = slopingPlot();
+		doc.entities.push(makeSpot({ x: 2, y: 10 }, 0.4));
+		doc.entities.push(makeSpot({ x: 12, y: 10 }, 5));
+		const field = buildField(doc);
+		expect(handleAt(doc, field, 's', 2).z).toBeCloseTo(0.4, 2);
+	});
+});
+
+describe('tiltFactor', () => {
+	it('takes the whole tilt at the end you grab and none at the end it pivots on', () => {
+		expect(tiltFactor('s', 20, 0, { x: 20, y: 5 })).toBeCloseTo(1, 6);
+		expect(tiltFactor('s', 20, 0, { x: 0, y: 5 })).toBeCloseTo(0, 6);
+		expect(tiltFactor('s', 20, 0, { x: 10, y: 5 })).toBeCloseTo(0.5, 6);
+	});
+
+	it('ramps the same way when you grab the other end', () => {
+		expect(tiltFactor('s', 0, 20, { x: 0, y: 5 })).toBeCloseTo(1, 6);
+		expect(tiltFactor('s', 0, 20, { x: 20, y: 5 })).toBeCloseTo(0, 6);
+		expect(tiltFactor('s', 0, 20, { x: 15, y: 5 })).toBeCloseTo(0.25, 6);
+	});
+
+	it('carries a point beyond the ends along the same ramp', () => {
+		expect(tiltFactor('s', 20, 0, { x: 30, y: 5 })).toBeCloseTo(1.5, 6);
+		expect(tiltFactor('s', 20, 0, { x: -10, y: 5 })).toBeCloseTo(-0.5, 6);
+	});
+
+	it('follows the direction you are looking from', () => {
+		// From the north the view runs the other way, so the same plan point sits at the far end.
+		expect(tiltFactor('n', -20, 0, { x: 20, y: 5 })).toBeCloseTo(1, 6);
+		expect(tiltFactor('e', 20, 0, { x: 5, y: 20 })).toBeCloseTo(1, 6);
+	});
+
+	it('does nothing when the two ends are the same place', () => {
+		expect(tiltFactor('s', 5, 5, { x: 9, y: 1 })).toBe(0);
 	});
 });

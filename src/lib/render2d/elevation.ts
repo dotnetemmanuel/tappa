@@ -13,6 +13,7 @@ import {
 	AXES,
 	elevationBounds,
 	groundProfile,
+	sectionProfile,
 	slopeHandles,
 	type Axis,
 	type Facing,
@@ -21,7 +22,12 @@ import {
 import { PLAN, LINE_PX } from './theme.js';
 import { toScreen, visibleRect, type View } from './view.js';
 
-export type ElevationOptions = { years: number; month: number };
+export type ElevationOptions = {
+	years: number;
+	month: number;
+	/** A point on the ground line being dragged or hovered, drawn like the end handles. */
+	grab?: SlopeHandle | null;
+};
 
 type Shape = { far: number; paint: (ctx: CanvasRenderingContext2D) => void };
 
@@ -99,8 +105,10 @@ export function paintElevation(
 	ctx.lineWidth = LINE_PX.bold;
 	ctx.stroke();
 
+	paintSection(ctx, doc, field, facing, view, uMin, uMax);
 	paintRuler(ctx, view, bounds);
 	for (const h of slopeHandles(doc, field, facing)) paintHandle(ctx, view, h);
+	if (o.grab) paintHandle(ctx, view, o.grab);
 	ctx.restore();
 }
 
@@ -357,10 +365,40 @@ function box(
 	ctx.stroke();
 }
 
+/**
+ * The ground through the middle of the plot, drawn thin over the silhouette. On an even slope
+ * it lies on the earth line and disappears into it; where a bank at the far edge stands higher,
+ * it shows what the handles actually move.
+ */
+function paintSection(
+	ctx: CanvasRenderingContext2D,
+	doc: Doc,
+	field: HeightField | null,
+	facing: Facing,
+	view: View,
+	uMin: number,
+	uMax: number
+): void {
+	if (!field) return;
+	const line = sectionProfile(doc, field, facing, uMin, uMax);
+	if (line.length < 2) return;
+	ctx.save();
+	ctx.beginPath();
+	line.forEach((p, i) => {
+		const s = toScreen(view, { x: p.u, y: p.z });
+		if (i === 0) ctx.moveTo(s.x, s.y);
+		else ctx.lineTo(s.x, s.y);
+	});
+	ctx.strokeStyle = PLAN.select;
+	ctx.lineWidth = LINE_PX.normal;
+	ctx.stroke();
+	ctx.restore();
+}
+
 /** A grabbable marker with its height, at each end of the ground line. */
 function paintHandle(ctx: CanvasRenderingContext2D, view: View, h: SlopeHandle): void {
 	const p = toScreen(view, { x: h.u, y: h.z });
-	const left = h.side === 'left';
+	const left = h.side !== 'right';
 	ctx.save();
 	ctx.beginPath();
 	ctx.arc(p.x, p.y, HANDLE_R, 0, Math.PI * 2);

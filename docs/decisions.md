@@ -70,9 +70,17 @@ Named type imports still come from the namespace.
 `buildField` turns the height points and the levelled areas into one grid of heights, and the plan, the 3D view, the sun study and the side view all read it.
 Evaluating a formula per query would cost minutes in the sun study, and a triangle network needs constrained triangulation for every terrace edge.
 
-## Height comes from a plane through the points, bent to pass through each one
-A least squares plane plus an inverse distance weighted correction of each point's own residual, which is exactly zero when the points are already planar.
-So three points give a dead even slope rather than three dimples, and the surface still passes through every number that was typed.
+## Height comes from a plane fitted afresh around every point on the ground
+Moving least squares: at each cell a plane through all the height points, weighted by one over distance to the fourth, which is exact at every point and reproduces a plane from three of them.
+One global plane plus corrections was tried first and coupled the whole plot, so raising one part by five metres leaned the far end by most of a metre; this leans it by a tenth.
+
+## The two ends of the side view tilt the plot, everything else is local
+Dragging an end ramps every height point about the far end, which is the move you want when the plot simply slopes; dragging anywhere else moves that one point.
+Without the split there is no way to say "the whole thing falls a bit more" without dragging every point by hand.
+
+## The side view carries a section line as well as the silhouette
+The filled earth is the highest ground anywhere across the plot, so nothing hides behind it, but the handles ride a section through the middle of the plot.
+Grabbing the silhouette would have bound the drag to a point at the far edge of the garden, which is not what is under the cursor.
 
 ## A levelled area is a field on an area, not its own entity
 `AreaEntity.grade` carries the level, the edge and the bank run, so a paved terrace is drawn once rather than as a surface plus a separate platform.
